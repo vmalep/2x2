@@ -69,3 +69,8 @@ fichier chiffré (enregistrement direct sous Chrome/Edge, téléchargement aille
   Chaque export porte l'empreinte du journal et s'inscrit au journal avec sa propre empreinte : « Vérifier un fichier exporté » reconnaît un fichier authentique et rejette un fichier retouché.
 
 Hors périmètre du prototype : détection d'anomalies par apprentissage, import natif des plateformes de paiement, travail simultané, import ODS.
+
+## Licence
+
+[MIT](LICENSE). Le logiciel est fourni « tel quel », sans garantie. Il n'a pas fait l'objet d'une relecture de sécurité indépendante :
+ne l'utilisez pas avec des données réelles sans cette relecture.
