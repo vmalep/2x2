@@ -1,0 +1,9 @@
+node_modules/
+dist/
+fictif/
+*.2x2
+*.2x2cle
+.claude/
+# Documents de travail internes : jamais dans le dépôt.
+2x2_Description_projet_v2.md
+docs-internes/
