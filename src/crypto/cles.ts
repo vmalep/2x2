@@ -6,6 +6,7 @@
 import { chiffrerJson, dechiffrerJson, type EnveloppeChiffree } from './chiffrement.ts';
 import { depuisBase64, depuisUtf8, jsonCanonique, utf8, versBase64 } from './encodage.ts';
 import { grouper, sha256Hex } from './empreinte.ts';
+import { t } from '../i18n/index.ts';
 
 export const FORMAT_CLE = '2x2-cle-personnelle';
 export const FORMAT_CLE_PUBLIQUE = '2x2-cle-publique';
@@ -38,7 +39,7 @@ export interface IdentiteDeverrouillee {
 }
 
 function reduire(jwk: JsonWebKey): ClePubliqueJwk {
-  if (jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.x || !jwk.y) throw new Error('Clé publique invalide.');
+  if (jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.x || !jwk.y) throw new Error(t('err.cle_invalide'));
   return { kty: 'EC', crv: 'P-256', x: jwk.x, y: jwk.y };
 }
 
@@ -53,7 +54,7 @@ export async function genererIdentite(
   iterations?: number,
 ): Promise<{ fichierCle: EnveloppeChiffree; fichierPublic: FichierClePublique; identite: IdentiteDeverrouillee }> {
   const nomPropre = nom.trim();
-  if (!nomPropre) throw new Error('Le nom est obligatoire.');
+  if (!nomPropre) throw new Error(t('err.nom_obligatoire'));
   const paire = (await crypto.subtle.generateKey(ALGO, true, ['sign', 'verify'])) as CryptoKeyPair;
   const clePublique = reduire(await crypto.subtle.exportKey('jwk', paire.publicKey));
   const clePriveeJwk = await crypto.subtle.exportKey('jwk', paire.privateKey);
@@ -83,7 +84,7 @@ export async function deverrouillerIdentite(fichierCle: EnveloppeChiffree, motDe
   const pub = fichierCle.public as { nom: string; clePublique: ClePubliqueJwk; empreinte: string; creeLe?: string };
   const clePublique = reduire(pub.clePublique as JsonWebKey);
   // Vérifie que la clé privée correspond bien à la clé publique annoncée.
-  if (jwk.x !== clePublique.x || jwk.y !== clePublique.y) throw new Error('Fichier de clé incohérent.');
+  if (jwk.x !== clePublique.x || jwk.y !== clePublique.y) throw new Error(t('err.cle_incoherente'));
   const empreinte = await empreinteCle(clePublique);
   const clePrivee = await crypto.subtle.importKey('jwk', jwk, ALGO, false, ['sign']);
   return { nom: pub.nom, creeLe: pub.creeLe ?? '', clePublique, empreinte, clePrivee };
@@ -106,9 +107,10 @@ const PREFIXE_CLE = '2X2-CLE-1.';
 /** Clé publique sous forme de texte, à coller dans un message. La ligne « Code » fait foi. */
 export function clePubliqueEnTexte(f: FichierClePublique): string {
   return [
-    `Clé publique 2x2 de ${f.nom}`,
-    `Empreinte : ${grouper(f.empreinte, 8)}`,
-    `Code : ${PREFIXE_CLE}${versBase64(utf8(JSON.stringify(f)))}`,
+    t('cle_texte.titre', { nom: f.nom }),
+    t('cle_texte.empreinte', { empreinte: grouper(f.empreinte, 8) }),
+    // Seule la ligne « Code » est relue (par son préfixe 2X2-CLE-1.).
+    t('recu.code', { code: `${PREFIXE_CLE}${versBase64(utf8(JSON.stringify(f)))}` }),
   ].join('\n');
 }
 
@@ -122,13 +124,13 @@ export async function lireFichierClePublique(texte: string): Promise<FichierCleP
       donnees = JSON.parse(depuisUtf8(depuisBase64(code)));
     } else donnees = JSON.parse(texte);
   } catch {
-    throw new Error('Clé publique illisible (fichier ou texte incomplet ?).');
+    throw new Error(t('err.cle_illisible'));
   }
-  if (donnees?.format !== FORMAT_CLE_PUBLIQUE) throw new Error("Ce fichier n'est pas une clé publique 2x2.");
+  if (donnees?.format !== FORMAT_CLE_PUBLIQUE) throw new Error(t('err.pas_cle'));
   const cle = reduire(donnees.cle as JsonWebKey);
   const empreinte = await empreinteCle(cle);
-  if (empreinte !== donnees.empreinte) throw new Error('Empreinte de la clé publique incohérente.');
-  if (typeof donnees.nom !== 'string' || !donnees.nom.trim()) throw new Error('Nom manquant dans la clé publique.');
+  if (empreinte !== donnees.empreinte) throw new Error(t('err.empreinte_cle'));
+  if (typeof donnees.nom !== 'string' || !donnees.nom.trim()) throw new Error(t('err.nom_manquant'));
   return { ...donnees, cle, empreinte };
 }
 

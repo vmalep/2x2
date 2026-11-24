@@ -63,6 +63,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   color: var(--accent-fonce); background: var(--accent-pale); padding: .2rem .55rem; border-radius: 99px;
 }
 .espace { flex: 1; }
+.entete select.choix-langue { width: auto; padding: .2rem .35rem; font-size: .8rem; font-weight: 600; }
 .etat-liste, .identite { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .nom-liste { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .identite { border-left: 1px solid var(--bord); padding-left: 1rem; }

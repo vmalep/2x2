@@ -9,6 +9,7 @@ import { verifierListe, type Etat, type Verification } from '../model/journal.ts
 import type { Liste, Role } from '../model/types.ts';
 import { effacerSecours, programmerSecours } from './secours.ts';
 import { demanderEmplacement, ecrireDansPoignee, enregistrementDirect, nomDeFichierSur, telecharger } from './fichiers.ts';
+import { langueCourante, t } from '../i18n/index.ts';
 
 export type Ecran = 'accueil' | 'import' | 'correction' | 'validation' | 'export' | 'journal' | 'aide';
 
@@ -41,7 +42,8 @@ let cacheAlertes: { cle: string; alertes: Alerte[] } | undefined;
 export function alertesCourantes(): Alerte[] {
   const { liste, etat } = session;
   if (!liste || !etat) return [];
-  const cle = liste.journal.at(-1)!.empreinte;
+  // Les libellés des règles par défaut et les messages dépendent de la langue.
+  const cle = `${liste.journal.at(-1)!.empreinte}|${langueCourante()}`;
   if (cacheAlertes?.cle !== cle) cacheAlertes = { cle, alertes: calculerAlertes(etat, etat.reglesCourantes()) };
   return cacheAlertes.alertes;
 }
@@ -72,7 +74,7 @@ export function notifier(message: string, type: 'info' | 'succes' | 'erreur' = '
   el.textContent = message;
   const fermer = document.createElement('button');
   fermer.className = 'fermer';
-  fermer.setAttribute('aria-label', 'Fermer');
+  fermer.setAttribute('aria-label', t('commun.fermer'));
   fermer.textContent = '×';
   fermer.addEventListener('click', () => el.remove());
   el.appendChild(fermer);
@@ -111,7 +113,7 @@ export function peut(role: Role): boolean {
 }
 
 export function nomAuteur(empreinte: string): string {
-  return session.etat?.utilisateurs.get(empreinte)?.nom ?? 'inconnu';
+  return session.etat?.utilisateurs.get(empreinte)?.nom ?? t('session.auteur_inconnu');
 }
 
 // ---------- Fichier de liste ----------
@@ -134,13 +136,13 @@ export async function ouvrirListe(texte: string, nomFichier: string, motDePasse:
   session.ecran = verification.valide ? 'correction' : 'journal';
   const ecart = reprise ? undefined : ecartDeVersion(nomFichier, liste);
   if (ecart) notifier(ecart, 'erreur');
-  if (!verification.valide) notifier('Le fichier présente des altérations : il est ouvert en lecture seule.', 'erreur');
-  else if (!moi()) notifier('Votre clé n’est pas déclarée dans cette liste : lecture seule.', 'erreur');
+  if (!verification.valide) notifier(t('session.altere'), 'erreur');
+  else if (!moi()) notifier(t('session.cle_non_declaree'), 'erreur');
 }
 
 export function fermerListe() {
-  if (session.nonEnregistre && !confirm('Des modifications ne sont pas enregistrées et seront perdues. Fermer quand même ?')) return;
-  if (session.decisionsDepuisRecu > 0 && !confirm('Vous avez pris des décisions de validation sans produire de reçu. Fermer quand même ?')) return;
+  if (session.nonEnregistre && !confirm(t('session.fermer_non_enregistre'))) return;
+  if (session.decisionsDepuisRecu > 0 && !confirm(t('session.fermer_sans_recu'))) return;
   effacerSecours();
   Object.assign(session, {
     liste: undefined,
@@ -180,7 +182,7 @@ export function ecartDeVersion(nomFichier: string, liste: Liste): string | undef
   if (!m) return undefined;
   const reelle = versionListe(liste).texte;
   const annoncee = `v${m[1]}-${m[2]}`;
-  return annoncee === reelle ? undefined : `Le nom du fichier annonce la version ${annoncee}, mais son contenu est en ${reelle}. Le contenu fait foi : vérifiez qu’il s’agit bien de la dernière version.`;
+  return annoncee === reelle ? undefined : t('session.ecart_version', { annoncee, reelle });
 }
 
 /** Enregistre le fichier chiffré : directement sur le disque si possible, sinon par téléchargement. */
@@ -200,11 +202,11 @@ export async function enregistrer() {
     if (!poignee) return;
     await ecrireDansPoignee(poignee, contenu);
     session.nomFichierListe = poignee.name;
-    notifier(`Liste chiffrée enregistrée : ${poignee.name}`, 'succes');
+    notifier(t('session.enregistree', { nom: poignee.name }), 'succes');
   } else {
     telecharger(nom, contenu, 'application/json');
     session.nomFichierListe = nom;
-    notifier(`Liste chiffrée téléchargée : ${nom}. Remplacez l’ancienne version par celle-ci.`, 'succes');
+    notifier(t('session.telechargee', { nom }), 'succes');
   }
   session.nonEnregistre = false;
   effacerSecours();
@@ -225,7 +227,7 @@ function sauvegarderEnSecours() {
   programmerSecours(liste, motDePasseListe, session.nomFichierListe ?? nomVersionne(liste), () => versionListe(liste).texte, (raison) => {
     if (echecSecoursSignale) return;
     echecSecoursSignale = true;
-    notifier(`Copie de secours impossible (${raison}) : pensez à enregistrer souvent.`, 'erreur');
+    notifier(t('session.secours_impossible', { raison }), 'erreur');
   });
 }
 

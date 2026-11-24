@@ -1,13 +1,15 @@
 import type { ClePubliqueJwk } from '../crypto/cles.ts';
 import type { Regle } from '../controles/regles.ts';
+import { langueCourante, libelles, tl, type Cle, type Langue } from '../i18n/index.ts';
 
 export type Role = 'responsable' | 'correction' | 'validation';
 
-export const LIBELLES_ROLES: Record<Role, string> = {
-  responsable: 'Responsable',
-  correction: 'Correction',
-  validation: 'Validation',
-};
+/** Libellés affichés (traduits à la lecture). Les codes de rôle, eux, sont signés au journal. */
+export const LIBELLES_ROLES: Record<Role, string> = libelles({
+  responsable: 'role.responsable',
+  correction: 'role.correction',
+  validation: 'role.validation',
+});
 
 export interface Utilisateur {
   nom: string;
@@ -29,6 +31,11 @@ export interface Original {
 
 const AUTRE = 'Autre (préciser en commentaire)';
 
+/**
+ * Motifs : les valeurs ci-dessous sont des CODES stables, signés tels quels au journal (en français).
+ * Ils ne sont traduits qu'à l'affichage (libelleMotif).
+ */
+
 /** Motifs proposés pour corriger une valeur. */
 export const MOTIFS_CORRECTION = ['Erreur de saisie', 'Vérification terrain', 'Changement de situation', AUTRE] as const;
 
@@ -47,6 +54,27 @@ export const MOTIFS_REINTEGRATION = ['Exclusion erronée', 'Situation régularis
 
 /** Anciens motifs (premières versions) : toujours acceptés pour relire les listes existantes. */
 const MOTIFS_ANCIENS = ['Fraude suspectée'] as const;
+
+const CLES_MOTIFS: Record<Motif, Cle> = {
+  'Erreur de saisie': 'motif.erreur_saisie',
+  'Vérification terrain': 'motif.verification_terrain',
+  'Changement de situation': 'motif.changement_situation',
+  [AUTRE]: 'motif.autre',
+  Doublon: 'motif.doublon',
+  'Ménage introuvable ou inexistant': 'motif.introuvable',
+  'Fraude avérée': 'motif.fraude_averee',
+  'Ne remplit pas les critères d’éligibilité': 'motif.criteres',
+  'Ménage parti ou dissous': 'motif.parti',
+  'Exclusion erronée': 'motif.exclusion_erronee',
+  'Situation régularisée': 'motif.regularisee',
+  'Fraude suspectée': 'motif.fraude_suspectee',
+};
+
+/** Libellé affiché d'un motif (code du journal), dans la langue courante ou donnée. Un motif inconnu s'affiche tel quel. */
+export function libelleMotif(m: string, l: Langue = langueCourante()): string {
+  const cle = CLES_MOTIFS[m as Motif];
+  return cle ? tl(l, cle) : m;
+}
 
 /** Tous les motifs reconnus par le journal. */
 export const MOTIFS = [...new Set([...MOTIFS_CORRECTION, ...MOTIFS_EXCLUSION, ...MOTIFS_REINTEGRATION, ...MOTIFS_ANCIENS])] as readonly Motif[];
@@ -120,17 +148,18 @@ export interface Parametres {
  */
 export type CategorieAlerte = 'integrite' | 'protection';
 
+/** Décisions d'alerte : les clés sont les codes signés au journal, les valeurs les libellés affichés. */
 export const DECISIONS_ALERTE: Record<CategorieAlerte, Record<string, string>> = {
-  integrite: {
-    confirmee: 'Anomalie confirmée',
-    verification_terrain: 'À vérifier sur le terrain',
-    faux_positif: 'Vérifiée : pas de problème',
-  },
-  protection: {
-    orientee: 'Orientée vers les services adaptés',
-    deja_suivie: 'Déjà suivie',
-    faux_positif: 'Vérifiée : pas de situation de protection',
-  },
+  integrite: libelles({
+    confirmee: 'decision.confirmee',
+    verification_terrain: 'decision.verification_terrain',
+    faux_positif: 'decision.faux_positif',
+  }),
+  protection: libelles({
+    orientee: 'decision.orientee',
+    deja_suivie: 'decision.deja_suivie',
+    faux_positif: 'decision.faux_positif_protection',
+  }),
 };
 
 /** Ancien format (paramètres fixes) : conservé pour relire les listes créées avant les règles. */

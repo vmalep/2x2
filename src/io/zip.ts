@@ -3,6 +3,7 @@
  * Méthodes « stockée » (0) et « deflate » (8), via les flux de compression natifs.
  */
 import type { Octets } from '../crypto/encodage.ts';
+import { t } from '../i18n/index.ts';
 
 const TABLE_CRC = (() => {
   const t = new Uint32Array(256);
@@ -42,13 +43,13 @@ export async function lireZip(archive: Uint8Array<ArrayBuffer>): Promise<Map<str
       break;
     }
   }
-  if (fin < 0) throw new Error('Archive ZIP invalide (fichier XLSX ou ODS attendu).');
+  if (fin < 0) throw new Error(t('err.zip_xlsx'));
   const nombre = vue.getUint16(fin + 10, true);
   let position = vue.getUint32(fin + 16, true);
   const decodeur = new TextDecoder();
   const resultat = new Map<string, Octets>();
   for (let n = 0; n < nombre; n++) {
-    if (vue.getUint32(position, true) !== 0x02014b50) throw new Error('Répertoire central ZIP corrompu.');
+    if (vue.getUint32(position, true) !== 0x02014b50) throw new Error(t('err.zip_repertoire'));
     const methode = vue.getUint16(position + 10, true);
     const tailleCompressee = vue.getUint32(position + 20, true);
     const longueurNom = vue.getUint16(position + 28, true);
@@ -58,13 +59,13 @@ export async function lireZip(archive: Uint8Array<ArrayBuffer>): Promise<Map<str
     const nom = decodeur.decode(archive.subarray(position + 46, position + 46 + longueurNom));
     position += 46 + longueurNom + longueurExtra + longueurCommentaire;
 
-    if (vue.getUint32(decalageLocal, true) !== 0x04034b50) throw new Error('En-tête local ZIP corrompu.');
+    if (vue.getUint32(decalageLocal, true) !== 0x04034b50) throw new Error(t('err.zip_entete'));
     const debut = decalageLocal + 30 + vue.getUint16(decalageLocal + 26, true) + vue.getUint16(decalageLocal + 28, true);
     const brut = archive.slice(debut, debut + tailleCompressee);
     if (nom.endsWith('/')) continue;
     if (methode === 0) resultat.set(nom, brut);
     else if (methode === 8) resultat.set(nom, await transformer(brut, new DecompressionStream('deflate-raw')));
-    else throw new Error(`Méthode de compression ZIP non prise en charge (${methode}).`);
+    else throw new Error(t('err.zip_methode', { methode }));
   }
   return resultat;
 }
@@ -84,19 +85,19 @@ export function indexerZip(archive: Uint8Array<ArrayBuffer>): Map<string, () => 
       break;
     }
   }
-  if (fin < 0) throw new Error('Archive ZIP invalide.');
+  if (fin < 0) throw new Error(t('err.zip'));
   let nombre = vue.getUint16(fin + 10, true);
   let position = vue.getUint32(fin + 16, true);
   if ((nombre === 0xffff || position === 0xffffffff) && fin >= 20 && vue.getUint32(fin - 20, true) === 0x07064b50) {
     const fin64 = u64(fin - 20 + 8);
-    if (vue.getUint32(fin64, true) !== 0x06064b50) throw new Error('Archive ZIP64 invalide.');
+    if (vue.getUint32(fin64, true) !== 0x06064b50) throw new Error(t('err.zip64'));
     nombre = u64(fin64 + 32);
     position = u64(fin64 + 48);
   }
   const decodeur = new TextDecoder();
   const index = new Map<string, () => Promise<Octets>>();
   for (let n = 0; n < nombre; n++) {
-    if (vue.getUint32(position, true) !== 0x02014b50) throw new Error('Répertoire central ZIP corrompu.');
+    if (vue.getUint32(position, true) !== 0x02014b50) throw new Error(t('err.zip_repertoire'));
     const methode = vue.getUint16(position + 10, true);
     let tailleCompressee = vue.getUint32(position + 20, true);
     const tailleBrute = vue.getUint32(position + 24, true);
@@ -127,12 +128,12 @@ export function indexerZip(archive: Uint8Array<ArrayBuffer>): Map<string, () => 
     const local = decalageLocal;
     const taille = tailleCompressee;
     index.set(nom, async () => {
-      if (vue.getUint32(local, true) !== 0x04034b50) throw new Error('En-tête local ZIP corrompu.');
+      if (vue.getUint32(local, true) !== 0x04034b50) throw new Error(t('err.zip_entete'));
       const debut = local + 30 + vue.getUint16(local + 26, true) + vue.getUint16(local + 28, true);
       const brut = archive.slice(debut, debut + taille);
       if (methode === 0) return brut;
       if (methode === 8) return transformer(brut, new DecompressionStream('deflate-raw'));
-      throw new Error(`Méthode de compression ZIP non prise en charge (${methode}).`);
+      throw new Error(t('err.zip_methode', { methode }));
     });
   }
   return index;

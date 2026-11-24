@@ -6,7 +6,7 @@
  */
 import type { Alerte } from '../../controles/controles.ts';
 import { decider, deciderAlerte } from '../../model/journal.ts';
-import { CHAMP_STATUT, DECISIONS_ALERTE } from '../../model/types.ts';
+import { CHAMP_STATUT, DECISIONS_ALERTE, libelleMotif } from '../../model/types.ts';
 import { badge, bouton, encadre } from '../composants.ts';
 import { dateLisible, h, remplacer, type Enfant } from '../dom.ts';
 import { alertesCourantes, aller, apresModification, nomAuteur, notifier, occupe, peut, session } from '../session.ts';
@@ -14,6 +14,7 @@ import { carteRegles, enqueteurDe, horodatageDe, jourEntretien, peutDecider } fr
 import { comparer } from './correction.ts';
 import { carteProduireRecu } from './recus.ts';
 import { choixColonnes } from '../colonnes.ts';
+import { libelles, t } from '../../i18n/index.ts';
 
 type Nature = 'correction' | 'alerte';
 
@@ -48,15 +49,16 @@ interface DefColonne {
   filtre: 'liste' | 'texte';
 }
 
-const COLONNES_BASE: DefColonne[] = [
-  { cle: 'nature', titre: 'Type', filtre: 'liste' },
-  { cle: 'objet', titre: 'Contrôle / champ', filtre: 'liste' },
-  { cle: 'menages', titre: 'Ménage(s)', filtre: 'texte' },
-  { cle: 'enqueteur', titre: 'Enquêteur', filtre: 'liste' },
-  { cle: 'date', titre: 'Date', filtre: 'liste' },
-  { cle: 'detail', titre: 'Détail', filtre: 'texte' },
-  { cle: 'auteur', titre: 'Proposée par', filtre: 'liste' },
-  { cle: 'statut', titre: 'Statut', filtre: 'liste' },
+/** Colonnes de base (titres dans la langue courante). */
+const COLONNES_BASE = (): DefColonne[] => [
+  { cle: 'nature', titre: t('journal.type'), filtre: 'liste' },
+  { cle: 'objet', titre: t('validation.col_objet'), filtre: 'liste' },
+  { cle: 'menages', titre: t('validation.col_menages'), filtre: 'texte' },
+  { cle: 'enqueteur', titre: t('commun.enqueteur'), filtre: 'liste' },
+  { cle: 'date', titre: t('commun.date'), filtre: 'liste' },
+  { cle: 'detail', titre: t('validation.col_detail'), filtre: 'texte' },
+  { cle: 'auteur', titre: t('validation.col_auteur'), filtre: 'liste' },
+  { cle: 'statut', titre: t('validation.col_statut'), filtre: 'liste' },
 ];
 
 const TOUS = '';
@@ -69,13 +71,14 @@ const vue = {
 };
 const selection = new Set<string>();
 
-const NATURES: Record<Nature, string> = { correction: 'Correction', alerte: 'Alerte' };
-const DECISIONS_CORRECTION: Record<string, string> = { acceptee: 'Accepter la correction', refusee: 'Refuser la correction' };
+const NATURES: Record<Nature, string> = libelles({ correction: 'journal.t_correction', alerte: 'journal.t_decision_alerte' });
+const DECISIONS_CORRECTION: Record<string, string> = libelles({ acceptee: 'validation.accepter', refusee: 'validation.refuser' });
 const COMMENTAIRE_OBLIGATOIRE = new Set(['refusee', 'confirmee', 'faux_positif']);
 
 /** Ouvre l'écran Validation, éventuellement filtré sur un type de ligne. */
 export function allerValidation(nature?: Nature) {
   vue.filtres = { statut: A_DECIDER, ...(nature ? { nature: NATURES[nature] } : {}) };
+  // (le filtre « nature » porte le libellé affiché : il est remis à zéro si la langue change)
   aller('validation');
 }
 
@@ -109,39 +112,39 @@ function lignes(): Ligne[] {
     const e = c.entree;
     const k = e.contenu;
     const aDecider = c.statut === 'en_attente';
-    const statut = aDecider ? 'Correction à valider' : c.statut === 'acceptee' ? 'Acceptée' : 'Refusée';
+    const statut = aDecider ? t('validation.a_valider_statut') : c.statut === 'acceptee' ? t('validation.acceptee') : t('validation.refusee');
     resultat.push({
       cle: `c:${e.n}`,
       nature: 'correction',
-      objet: k.champ === CHAMP_STATUT ? (k.nouvelle === 'exclu' ? 'Exclusion du ménage' : 'Réintégration du ménage') : `Champ « ${k.champ} »`,
+      objet: k.champ === CHAMP_STATUT ? (k.nouvelle === 'exclu' ? t('validation.exclusion_menage') : t('validation.reintegration_menage')) : t('validation.champ', { champ: k.champ }),
       menages: [k.menage],
       enqueteur: enqueteurDe(k.menage),
       ...datesDe([k.menage]),
-      detail: `${k.ancienne} → ${k.nouvelle} ${k.motif} ${k.commentaire}`,
+      detail: `${k.ancienne} → ${k.nouvelle} ${libelleMotif(k.motif)} ${k.commentaire}`,
       auteur: nomAuteur(e.auteur),
       statut,
       aDecider,
       bloque: !aDecider
-        ? 'Correction déjà traitée.'
+        ? t('validation.deja_traitee')
         : !peut('validation')
-          ? 'Il faut le rôle « Validation ».'
+          ? t('validation.role_validation')
           : e.auteur === moiEmpreinte
-            ? 'Vous êtes l’auteur de cette correction : une autre personne doit la valider (quatre yeux).'
+            ? t('validation.propre_correction')
             : '',
       rendreDetail: () =>
         h(
           'div',
           null,
-          h('div', { class: 'diff' }, h('del', null, k.ancienne || '(vide)'), ' → ', h('ins', null, k.nouvelle || '(vide)')),
-          h('div', { class: 'discret' }, k.motif, k.commentaire && ` — « ${k.commentaire} »`, ` · n° ${e.n}, ${dateLisible(e.le)}`),
+          h('div', { class: 'diff' }, h('del', null, k.ancienne || t('commun.vide')), ' → ', h('ins', null, k.nouvelle || t('commun.vide'))),
+          h('div', { class: 'discret' }, libelleMotif(k.motif), k.commentaire && t('validation.commentaire', { texte: k.commentaire }), t('validation.numero_date', { n: e.n, date: dateLisible(e.le) })),
         ),
       rendreStatut: () =>
         aDecider
-          ? badge('à valider', 'attente')
+          ? badge(t('validation.a_valider'), 'attente')
           : [
               badge(statut, c.statut === 'acceptee' ? 'ok' : 'refus'),
               c.decision && h('div', { class: 'discret' }, `${nomAuteur(c.decision.auteur)}, ${dateLisible(c.decision.le)}`),
-              !!c.decision?.contenu.commentaire && h('div', { class: 'commentaire' }, `« ${c.decision.contenu.commentaire} »`),
+              !!c.decision?.contenu.commentaire && h('div', { class: 'commentaire' }, t('commun.guillemets', { texte: c.decision.contenu.commentaire })),
             ],
       correction: e.n,
     });
@@ -150,7 +153,7 @@ function lignes(): Ligne[] {
   for (const a of alertesCourantes()) {
     const d = etat.decisionsAlertes.get(a.id);
     const options = DECISIONS_ALERTE[a.categorie];
-    const statut = d ? (options[d.contenu.decision] ?? d.contenu.decision) : 'Alerte sans décision';
+    const statut = d ? (options[d.contenu.decision] ?? d.contenu.decision) : t('validation.alerte_sans_decision');
     resultat.push({
       cle: `a:${a.id}`,
       nature: 'alerte',
@@ -162,16 +165,16 @@ function lignes(): Ligne[] {
       auteur: '',
       statut,
       aDecider: !d,
-      bloque: peutDecider() ? '' : 'Il faut le rôle « Validation » ou « Responsable ».',
+      bloque: peutDecider() ? '' : t('validation.role_decider'),
       rendreDetail: () => a.message,
       rendreStatut: () =>
         d
           ? [
               badge(statut, d.contenu.decision === 'confirmee' ? 'alerte' : 'ok'),
               h('div', { class: 'discret' }, `${nomAuteur(d.auteur)}, ${dateLisible(d.le)}`),
-              !!d.contenu.commentaire && h('div', { class: 'commentaire' }, `« ${d.contenu.commentaire} »`),
+              !!d.contenu.commentaire && h('div', { class: 'commentaire' }, t('commun.guillemets', { texte: d.contenu.commentaire })),
             ]
-          : badge('sans décision', 'attente'),
+          : badge(t('commun.sans_decision'), 'attente'),
       alerte: a,
     });
   }
@@ -207,18 +210,18 @@ function filtrerTrier(toutes: Ligne[], colonnes: DefColonne[]): Ligne[] {
       return filtre === 'texte' ? valeurColonne(l, cle).toLowerCase().includes(v.toLowerCase()) : valeurColonne(l, cle) === v;
     }),
   );
-  const t = vue.tri;
+  const tri = vue.tri;
   const cleTri = (l: Ligne, c: Colonne) => (c === 'date' ? l.horodatage : valeurColonne(l, c));
-  if (t) retenues.sort((a, b) => t.sens * comparateur.compare(cleTri(a, t.cle), cleTri(b, t.cle)));
+  if (tri) retenues.sort((a, b) => tri.sens * comparateur.compare(cleTri(a, tri.cle), cleTri(b, tri.cle)));
   return retenues;
 }
 
 /** Décisions proposées pour la sélection : il faut que toutes les lignes cochées soient de même type. */
 function decisionsPour(choisies: Ligne[]): { options: Record<string, string>; message?: string } {
   const natures = new Set(choisies.map((l) => l.nature));
-  if (natures.size === 0) return { options: {}, message: 'Cochez des lignes dans le tableau.' };
+  if (natures.size === 0) return { options: {}, message: t('validation.cochez_lignes') };
   if (natures.size > 1) {
-    return { options: {}, message: 'La sélection mêle corrections et alertes, qui appellent des décisions différentes : filtrez sur la colonne « Type ».' };
+    return { options: {}, message: t('validation.melange') };
   }
   return { options: natures.has('correction') ? DECISIONS_CORRECTION : DECISIONS_ALERTE.integrite };
 }
@@ -231,14 +234,14 @@ export function ecranValidation() {
   const choixCols = choixColonnes(
     `2x2-colonnes-validation-${o.empreinteFichier}`,
     [
-      ...COLONNES_BASE.map((c) => ({ cle: c.cle, libelle: c.titre, groupe: 'Colonnes de base', obligatoire: c.cle === 'menages' || c.cle === 'statut' })),
-      ...o.colonnes.filter((c) => c !== o.colonneId).map((c) => ({ cle: `d:${c}`, libelle: c, groupe: 'Données des ménages' })),
+      ...COLONNES_BASE().map((c) => ({ cle: c.cle, libelle: c.titre, groupe: t('validation.groupe_base'), obligatoire: c.cle === 'menages' || c.cle === 'statut' })),
+      ...o.colonnes.filter((c) => c !== o.colonneId).map((c) => ({ cle: `d:${c}`, libelle: c, groupe: t('validation.groupe_donnees') })),
     ],
-    COLONNES_BASE.map((c) => c.cle),
+    COLONNES_BASE().map((c) => c.cle),
     () => aller('validation'),
   );
   const COLONNES: DefColonne[] = choixCols.visibles().map(
-    (k) => COLONNES_BASE.find((c) => c.cle === k) ?? { cle: k, titre: k.slice(2), filtre: 'texte' as const },
+    (k) => COLONNES_BASE().find((c) => c.cle === k) ?? { cle: k, titre: k.slice(2), filtre: 'texte' as const },
   );
   for (const k of Object.keys(vue.filtres)) if (!COLONNES.some((c) => c.cle === k)) delete vue.filtres[k];
   if (vue.tri && !COLONNES.some((c) => c.cle === vue.tri!.cle)) vue.tri = null;
@@ -253,9 +256,9 @@ export function ecranValidation() {
   const zoneTableau = h('div', { class: 'cadre-tableau' });
   const compteur = h('strong');
   const message = h('p', { class: 'aide' });
-  const choix = h('select', { 'aria-label': 'Décision pour la sélection' });
-  const commentaire = h('input', { type: 'text', placeholder: 'Commentaire (le même pour toutes les lignes cochées)', 'aria-label': 'Commentaire' });
-  const signer = bouton('Signer', () => signerSelection(), 'principal');
+  const choix = h('select', { 'aria-label': t('validation.decision_selection') });
+  const commentaire = h('input', { type: 'text', placeholder: t('validation.commentaire_placeholder'), 'aria-label': t('commun.commentaire') });
+  const signer = bouton(t('commun.signer'), () => signerSelection(), 'principal');
   let affichees: Ligne[] = [];
 
   const choisies = () => toutes.filter((l) => selection.has(l.cle) && !l.bloque);
@@ -263,43 +266,43 @@ export function ecranValidation() {
   const majBarre = () => {
     const c = choisies();
     const visibles = affichees.filter((l) => selection.has(l.cle)).length;
-    compteur.textContent = `${c.length} ligne(s) cochée(s)${c.length !== visibles ? ` dont ${c.length - visibles} hors filtre` : ''}`;
+    compteur.textContent = t('validation.cochees', { n: c.length }) + (c.length !== visibles ? t('validation.hors_filtre', { n: c.length - visibles }) : '');
     const { options, message: m } = decisionsPour(c);
     const avant = choix.value;
-    remplacer(choix, h('option', { value: '' }, '— Décision —'), Object.entries(options).map(([v, l]) => h('option', { value: v, selected: v === avant }, l)));
+    remplacer(choix, h('option', { value: '' }, t('commun.choix_decision')), Object.entries(options).map(([v, l]) => h('option', { value: v, selected: v === avant }, l)));
     choix.disabled = !Object.keys(options).length;
     message.textContent = m ?? '';
-    signer.textContent = c.length ? `Signer pour ${c.length} ligne(s)` : 'Signer';
+    signer.textContent = c.length ? t('validation.signer_pour', { n: c.length }) : t('commun.signer');
     signer.toggleAttribute('disabled', !Object.keys(options).length);
     majCommentaire();
   };
   const majCommentaire = () => {
     commentaire.placeholder = COMMENTAIRE_OBLIGATOIRE.has(choix.value)
-      ? 'Commentaire obligatoire : sur quoi repose cette décision ?'
-      : 'Commentaire (le même pour toutes les lignes cochées)';
+      ? t('commun.commentaire_obligatoire')
+      : t('validation.commentaire_placeholder');
   };
   choix.addEventListener('change', majCommentaire);
 
   const signerSelection = () => {
     const c = choisies();
-    if (!c.length) return notifier('Cochez d’abord des lignes.', 'erreur');
-    if (!choix.value) return notifier('Choisissez une décision.', 'erreur');
+    if (!c.length) return notifier(t('validation.cochez_avant'), 'erreur');
+    if (!choix.value) return notifier(t('commun.choisir_decision'), 'erreur');
     if (COMMENTAIRE_OBLIGATOIRE.has(choix.value) && !commentaire.value.trim()) {
       commentaire.focus();
-      return notifier('Cette décision doit être motivée par un commentaire.', 'erreur');
+      return notifier(t('commun.decision_motivee'), 'erreur');
     }
     const libelle = choix.selectedOptions[0]?.textContent ?? choix.value;
     const horsFiltre = c.filter((l) => !affichees.includes(l)).length;
     if (
       !confirm(
-        `Signer « ${libelle} » pour ${c.length} ligne(s)${horsFiltre ? `, dont ${horsFiltre} masquée(s) par les filtres` : ''} ? Chaque décision sera inscrite séparément au journal.`,
+        t(horsFiltre ? 'validation.confirmer_masquees' : 'validation.confirmer', { libelle, n: c.length, masquees: horsFiltre }),
       )
     ) {
       return;
     }
     const decision = choix.value;
     const texte = commentaire.value.trim();
-    occupe(`Signature de ${c.length} décision(s)…`, async () => {
+    occupe(t('validation.signature', { n: c.length }), async () => {
       for (const l of c) {
         if (l.correction !== undefined) {
           await decider(session.liste!, etat, session.identite!, { correction: l.correction, decision: decision as 'acceptee' | 'refusee', commentaire: texte });
@@ -311,7 +314,7 @@ export function ecranValidation() {
         }
         selection.delete(l.cle);
       }
-      notifier(`${c.length} décision(s) signée(s) et journalisée(s).`, 'succes');
+      notifier(t('validation.signees', { n: c.length }), 'succes');
       await apresModification();
     });
   };
@@ -329,8 +332,8 @@ export function ecranValidation() {
     if (filtre === 'texte') {
       return h('input', {
         type: 'search',
-        placeholder: 'Filtrer…',
-        'aria-label': `Filtrer ${titre}`,
+        placeholder: t('commun.filtrer'),
+        'aria-label': t('commun.filtrer_col', { titre }),
         value: vue.filtres[cle] ?? '',
         oninput: (e: Event) => {
           vue.filtres[cle] = (e.target as HTMLInputElement).value;
@@ -344,14 +347,14 @@ export function ecranValidation() {
     return h(
       'select',
       {
-        'aria-label': `Filtrer ${titre}`,
+        'aria-label': t('commun.filtrer_col', { titre }),
         onchange: (e: Event) => {
           vue.filtres[cle] = (e.target as HTMLSelectElement).value;
           dessiner();
         },
       },
-      h('option', { value: TOUS, selected: !vue.filtres[cle] }, 'Tous'),
-      cle === 'statut' && h('option', { value: A_DECIDER, selected: vue.filtres[cle] === A_DECIDER }, 'À décider'),
+      h('option', { value: TOUS, selected: !vue.filtres[cle] }, t('commun.tous')),
+      cle === 'statut' && h('option', { value: A_DECIDER, selected: vue.filtres[cle] === A_DECIDER }, t('validation.a_decider')),
       valeurs.map(([v, n]) => h('option', { value: v, selected: vue.filtres[cle] === v }, `${v} (${n})`)),
     );
   });
@@ -360,7 +363,7 @@ export function ecranValidation() {
     const b = h('button', {
       type: 'button',
       class: 'tri',
-      title: 'Trier',
+      title: t('commun.trier'),
       onclick: () => {
         vue.tri = vue.tri?.cle !== cle ? { cle, sens: 1 } : vue.tri.sens === 1 ? { cle, sens: -1 } : null;
         dessiner();
@@ -371,8 +374,8 @@ export function ecranValidation() {
 
   const caseTout = h('input', {
     type: 'checkbox',
-    'aria-label': 'Cocher toutes les lignes à décider affichées',
-    title: 'Coche les lignes affichées qui attendent une décision. Pour réviser une décision déjà prise, cochez sa ligne une à une.',
+    'aria-label': t('validation.cocher_tout'),
+    title: t('validation.cocher_tout_titre'),
     onchange: (e: Event) => {
       const oui = (e.target as HTMLInputElement).checked;
       for (const l of affichees) if (!l.bloque && l.aDecider) oui ? selection.add(l.cle) : selection.delete(l.cle);
@@ -400,7 +403,7 @@ export function ecranValidation() {
           l.menages.map((m, i) => [i > 0 && ' ', lienMenage(m)]),
           l.alerte &&
             l.menages.length > 1 &&
-            h('div', null, h('button', { type: 'button', class: 'lien petit', onclick: () => comparer(l.menages, l.alerte!.id) }, 'Comparer')),
+            h('div', null, h('button', { type: 'button', class: 'lien petit', onclick: () => comparer(l.menages, l.alerte!.id) }, t('validation.comparer'))),
         );
       case 'enqueteur':
         return h('td', null, l.enqueteur);
@@ -431,7 +434,7 @@ export function ecranValidation() {
           checked: coche && !l.bloque,
           disabled: !!l.bloque,
           title: l.bloque || undefined,
-          'aria-label': `Cocher ${NATURES[l.nature].toLowerCase()} ${l.objet} ${l.menages.join(', ')}`,
+          'aria-label': t('validation.cocher_ligne', { nature: NATURES[l.nature].toLowerCase(), objet: l.objet, menages: l.menages.join(', ') }),
           onchange: (e: Event) => {
             (e.target as HTMLInputElement).checked ? selection.add(l.cle) : selection.delete(l.cle);
             (e.target as HTMLElement).closest('tr')?.classList.toggle('selection', selection.has(l.cle));
@@ -469,11 +472,11 @@ export function ecranValidation() {
           null,
           affichees.length
             ? affichees.map(rendreLigne)
-            : h('tr', null, h('td', { colspan: COLONNES.length + 1, class: 'vide' }, 'Aucune ligne ne correspond aux filtres.')),
+            : h('tr', null, h('td', { colspan: COLONNES.length + 1, class: 'vide' }, t('validation.aucune_ligne'))),
         ),
       ),
     );
-    resume.textContent = `${affichees.length} ligne(s) affichée(s) sur ${toutes.length}`;
+    resume.textContent = t('validation.affichees', { n: affichees.length, total: toutes.length });
     majCaseTout();
     majBarre();
   }
@@ -486,7 +489,7 @@ export function ecranValidation() {
     h(
       'div',
       { class: 'barre-groupe statique', id: 'barre-decision' },
-      h('div', { class: 'ligne' }, compteur, bouton('Tout décocher', () => (selection.clear(), dessiner()))),
+      h('div', { class: 'ligne' }, compteur, bouton(t('commun.tout_decocher'), () => (selection.clear(), dessiner()))),
       h('div', { class: 'actions' }, choix, commentaire, signer),
       message,
     );
@@ -494,20 +497,20 @@ export function ecranValidation() {
   dessiner();
 
   return [
-    h('h1', null, 'Validation'),
+    h('h1', null, t('nav.validation')),
     h(
       'p',
       { class: 'intro' },
-      'Tout ce qui appelle une décision humaine, signée et journalisée : les corrections proposées (quatre yeux) et les alertes des règles de contrôle. L’outil signale, il ne décide jamais.',
+      t('validation.intro'),
     ),
     h(
       'div',
       { class: 'compteurs' },
-      h('div', { class: 'compteur attente' }, h('span', { class: 'nombre' }, String(corrAttente)), 'corrections à valider'),
-      h('div', { class: 'compteur attente' }, h('span', { class: 'nombre' }, String(alertesAttente)), 'alertes sans décision'),
-      h('div', { class: 'compteur ok' }, h('span', { class: 'nombre' }, String(decidees)), 'décidées'),
+      h('div', { class: 'compteur attente' }, h('span', { class: 'nombre' }, String(corrAttente)), t('validation.compteur_corrections')),
+      h('div', { class: 'compteur attente' }, h('span', { class: 'nombre' }, String(alertesAttente)), t('validation.compteur_alertes')),
+      h('div', { class: 'compteur ok' }, h('span', { class: 'nombre' }, String(decidees)), t('validation.compteur_decidees')),
     ),
-    !peutAgir && encadre('info', 'Lecture seule : il faut le rôle « Validation » (ou « Responsable » pour les alertes) pour décider.'),
+    !peutAgir && encadre('info', t('validation.lecture_seule')),
     carteRegles(alertesCourantes()),
     barre,
     h(
@@ -518,7 +521,7 @@ export function ecranValidation() {
         'div',
         { class: 'ligne serree' },
         choixCols.ouvrir,
-        bouton('Réinitialiser filtres et tri', () => {
+        bouton(t('commun.reinitialiser'), () => {
           vue.filtres = { statut: A_DECIDER };
           vue.tri = null;
           aller('validation');
@@ -527,7 +530,7 @@ export function ecranValidation() {
     ),
     choixCols.panneau,
     zoneTableau,
-    h('p', { class: 'aide' }, 'Cliquez sur un titre de colonne pour trier. La case de l’en-tête coche les lignes à décider ; une décision déjà prise se révise en cochant sa ligne. Une case grisée ne peut pas être cochée : survolez-la pour savoir pourquoi.'),
+    h('p', { class: 'aide' }, t('validation.aide')),
     // Toute personne qui signe des décisions (validation ou responsable) peut produire son reçu.
     (peut('validation') || peutDecider()) && carteProduireRecu(),
   ];

@@ -4,16 +4,17 @@ import { genererDonneesFictives } from '../../gen/fictif.ts';
 import { ecrireCsv } from '../../io/csv.ts';
 import { ecrireXlsx } from '../../io/xlsx.ts';
 import { bouton, carte, champ, empreinte, encadre, motDePasse } from '../composants.ts';
-import { dateLisible, h } from '../dom.ts';
+import { dateLisible, h, tr } from '../dom.ts';
 import { choisirFichier, nomDeFichierSur, telecharger } from '../fichiers.ts';
 import { aller, notifier, occupe, ouvrirListe, rafraichir, session } from '../session.ts';
 import { effacerSecours, lireSecours } from '../secours.ts';
+import { t } from '../../i18n/index.ts';
 
 const LONGUEUR_MIN = 12;
 
 function ecranIdentite() {
   // --- Créer ma clé ---
-  const nom = h('input', { type: 'text', autocomplete: 'name', placeholder: 'Prénom Nom' });
+  const nom = h('input', { type: 'text', autocomplete: 'name', placeholder: t('accueil.prenom_nom') });
   const mdp1 = motDePasse('', 'new-password');
   const mdp2 = motDePasse('', 'new-password');
   const creer = h(
@@ -21,50 +22,50 @@ function ecranIdentite() {
     {
       onsubmit: (e: Event) => {
         e.preventDefault();
-        if (mdp1.value.length < LONGUEUR_MIN) return notifier(`Le mot de passe doit compter au moins ${LONGUEUR_MIN} caractères.`, 'erreur');
-        if (mdp1.value !== mdp2.value) return notifier('Les deux mots de passe ne correspondent pas.', 'erreur');
-        occupe('Génération de la clé…', async () => {
+        if (mdp1.value.length < LONGUEUR_MIN) return notifier(t('accueil.mdp_court', { n: LONGUEUR_MIN }), 'erreur');
+        if (mdp1.value !== mdp2.value) return notifier(t('commun.mdp_differents'), 'erreur');
+        occupe(t('accueil.generation_cle'), async () => {
           const { fichierCle, identite } = await genererIdentite(nom.value, mdp1.value);
           // Un seul fichier ici : la clé privée, qui reste chez vous. La clé publique se transmet ensuite.
           telecharger(`2x2_cle_privee_${nomDeFichierSur(identite.nom)}.2x2cle`, JSON.stringify(fichierCle), 'application/json');
           session.identite = identite;
           session.cleNouvelle = true;
-          notifier('Clé créée : votre clé privée a été enregistrée.', 'succes');
+          notifier(t('accueil.cle_creee_notif'), 'succes');
           rafraichir();
         });
       },
     },
-    champ('Votre nom', nom),
+    champ(t('accueil.votre_nom'), nom),
     champ(
-      'Mot de passe de la clé',
+      t('accueil.mdp_cle'),
       mdp1,
-      `Au moins ${LONGUEUR_MIN} caractères. Notez-le en lieu sûr : s’il est perdu, la clé ne peut pas être récupérée. Ne le communiquez à personne.`,
+      t('accueil.mdp_cle_aide', { n: LONGUEUR_MIN }),
     ),
-    champ('Confirmer le mot de passe', mdp2),
-    h('button', { type: 'submit', class: 'bouton principal' }, 'Créer ma clé'),
+    champ(t('accueil.confirmer_mdp'), mdp2),
+    h('button', { type: 'submit', class: 'bouton principal' }, t('accueil.creer_cle')),
   );
 
   // --- Ouvrir ma clé ---
   let fichierCle: EnveloppeChiffree | undefined;
-  const nomFichier = h('span', { class: 'discret' }, 'Aucun fichier choisi');
+  const nomFichier = h('span', { class: 'discret' }, t('commun.aucun_fichier'));
   const mdp = motDePasse();
   const ouvrir = h(
     'form',
     {
       onsubmit: (e: Event) => {
         e.preventDefault();
-        if (!fichierCle) return notifier('Choisissez d’abord votre fichier de clé (.2x2cle).', 'erreur');
-        occupe('Déverrouillage de la clé…', async () => {
+        if (!fichierCle) return notifier(t('accueil.choisir_cle_avant'), 'erreur');
+        occupe(t('accueil.deverrouillage'), async () => {
           try {
             session.identite = await deverrouillerIdentite(fichierCle!, mdp.value);
           } catch (e) {
             if (!(e instanceof MotDePasseIncorrect)) throw e;
             return notifier(
-              'Mot de passe incorrect. S’il est perdu, cette clé est inutilisable : créez une nouvelle clé et envoyez la nouvelle clé publique au responsable de la liste.',
+              t('accueil.mdp_incorrect'),
               'erreur',
             );
           }
-          notifier(`Bonjour ${session.identite.nom}.`, 'succes');
+          notifier(t('accueil.bonjour_notif', { nom: session.identite.nom }), 'succes');
           rafraichir();
         });
       },
@@ -72,42 +73,40 @@ function ecranIdentite() {
     h(
       'div',
       { class: 'champ' },
-      h('label', null, 'Fichier de clé personnelle'),
+      h('label', null, t('accueil.fichier_cle')),
       h(
         'div',
         { class: 'ligne' },
-        bouton('Choisir…', async () => {
+        bouton(t('commun.choisir'), async () => {
           const f = await choisirFichier('.2x2cle,application/json');
           if (!f) return;
           try {
             fichierCle = JSON.parse(f.texte());
             nomFichier.textContent = f.nom;
           } catch {
-            notifier('Fichier de clé illisible.', 'erreur');
+            notifier(t('accueil.cle_illisible'), 'erreur');
           }
         }),
         nomFichier,
       ),
     ),
-    champ('Mot de passe de la clé', mdp),
-    h('button', { type: 'submit', class: 'bouton principal' }, 'Déverrouiller'),
+    champ(t('accueil.mdp_cle'), mdp),
+    h('button', { type: 'submit', class: 'bouton principal' }, t('accueil.deverrouiller')),
   );
 
   return [
-    h('h1', null, 'Votre clé personnelle'),
+    h('h1', null, t('accueil.titre_cle')),
     h(
       'p',
       { class: 'intro' },
-      'Chaque personne signe ses actions avec sa propre clé. La clé privée reste sur votre poste, chiffrée par votre mot de passe. ' +
-        'Seule la clé publique est transmise au responsable de la liste.',
+      t('accueil.intro_cle'),
     ),
     lireSecours() &&
       encadre(
         'alerte',
-        h('strong', null, 'Une liste non enregistrée a été retrouvée dans ce navigateur.'),
-        ' Déverrouillez votre clé pour la reprendre.',
+        tr('accueil.secours_trouve'),
       ),
-    h('div', { class: 'grille-2' }, carte('J’ai déjà une clé', ouvrir), carte('Créer ma clé', creer)),
+    h('div', { class: 'grille-2' }, carte(t('accueil.deja_cle'), ouvrir), carte(t('accueil.creer_cle'), creer)),
     donneesFictives(),
   ];
 }
@@ -121,33 +120,31 @@ function carteReprise() {
   return h(
     'section',
     { class: 'carte reprise' },
-    h('h2', null, 'Travail non enregistré retrouvé'),
+    h('h2', null, t('accueil.reprise_titre')),
     h(
       'p',
       null,
-      'La liste ',
-      h('strong', null, s.nomFichier),
-      ` (version ${s.version}) a été modifiée le ${dateLisible(s.le)} sans être enregistrée. Une copie chiffrée a été gardée par ce navigateur.`,
+      tr('accueil.reprise_texte', { nom: s.nomFichier, version: s.version, date: dateLisible(s.le) }),
     ),
     h(
       'form',
       {
         onsubmit: (e: Event) => {
           e.preventDefault();
-          occupe('Déchiffrement et vérification du journal…', async () => {
+          occupe(t('accueil.dechiffrement'), async () => {
             await ouvrirListe(s.contenu, s.nomFichier, mdp.value, true);
-            notifier('Travail repris. Enregistrez la liste pour obtenir le fichier à jour.', 'succes');
+            notifier(t('accueil.reprise_ok'), 'succes');
             rafraichir();
           });
         },
       },
-      champ('Mot de passe de cette liste', mdp),
+      champ(t('accueil.mdp_cette_liste'), mdp),
       h(
         'div',
         { class: 'ligne' },
-        h('button', { type: 'submit', class: 'bouton principal' }, 'Reprendre'),
-        bouton('Abandonner ces modifications', () => {
-          if (!confirm('Supprimer définitivement cette copie ? Les modifications non enregistrées seront perdues.')) return;
+        h('button', { type: 'submit', class: 'bouton principal' }, t('accueil.reprendre')),
+        bouton(t('accueil.abandonner'), () => {
+          if (!confirm(t('accueil.abandonner_confirmer'))) return;
           effacerSecours();
           rafraichir();
         }),
@@ -159,7 +156,7 @@ function carteReprise() {
 function ecranChoixListe() {
   const id = session.identite!;
   let fichier: { nom: string; texte: string } | undefined;
-  const nomFichier = h('span', { class: 'discret' }, 'Aucun fichier choisi');
+  const nomFichier = h('span', { class: 'discret' }, t('commun.aucun_fichier'));
   // Pas de saisie automatique : le navigateur proposerait le mot de passe de la clé, qui n'est pas celui de la liste.
   const mdp = motDePasse('', 'new-password'); // « off » est ignoré par Firefox pour les mots de passe.
   mdp.setAttribute('data-lpignore', 'true');
@@ -168,8 +165,8 @@ function ecranChoixListe() {
     {
       onsubmit: (e: Event) => {
         e.preventDefault();
-        if (!fichier) return notifier('Choisissez d’abord un fichier de liste (.2x2).', 'erreur');
-        occupe('Déchiffrement et vérification du journal…', async () => {
+        if (!fichier) return notifier(t('accueil.choisir_liste_avant'), 'erreur');
+        occupe(t('accueil.dechiffrement'), async () => {
           await ouvrirListe(fichier!.texte, fichier!.nom, mdp.value);
           rafraichir();
         });
@@ -178,11 +175,11 @@ function ecranChoixListe() {
     h(
       'div',
       { class: 'champ' },
-      h('label', null, 'Fichier de liste chiffré'),
+      h('label', null, t('accueil.fichier_liste')),
       h(
         'div',
         { class: 'ligne' },
-        bouton('Choisir…', async () => {
+        bouton(t('commun.choisir'), async () => {
           const f = await choisirFichier('.2x2,application/json');
           if (!f) return;
           fichier = { nom: f.nom, texte: f.texte() };
@@ -191,56 +188,56 @@ function ecranChoixListe() {
         nomFichier,
       ),
     ),
-    champ('Mot de passe de la liste', mdp),
-    h('button', { type: 'submit', class: 'bouton principal' }, 'Ouvrir et vérifier'),
+    champ(t('accueil.mdp_liste'), mdp),
+    h('button', { type: 'submit', class: 'bouton principal' }, t('accueil.ouvrir_verifier')),
   );
 
   return [
-    h('h1', null, `Bonjour ${id.nom}`),
+    h('h1', null, t('accueil.bonjour', { nom: id.nom })),
     session.cleNouvelle &&
       encadre(
         'ok',
-        h('strong', null, 'Votre clé est créée.'),
+        h('strong', null, t('accueil.cle_creee')),
         h(
           'ol',
           null,
-          h('li', null, 'Votre ', h('strong', null, 'clé privée'), ' (fichier .2x2cle) vient d’être enregistrée. Gardez-la en lieu sûr, avec son mot de passe. Elle ne se transmet jamais.'),
-          h('li', null, 'Transmettez maintenant votre ', h('strong', null, 'clé publique'), ' au responsable de la liste, avec les boutons ci-dessous.'),
+          h('li', null, tr('accueil.cle_creee_1')),
+          h('li', null, tr('accueil.cle_creee_2')),
         ),
       ),
     encadre(
       'info',
-      h('p', null, h('strong', null, 'Votre clé publique'), ' — empreinte : ', empreinte(id.empreinte)),
+      h('p', null, tr('accueil.cle_publique', { empreinte: empreinte(id.empreinte) })),
       h(
         'div',
         { class: 'ligne' },
         bouton(
-          'Copier ma clé publique (texte)',
+          t('accueil.copier_cle'),
           async () => {
             try {
               await navigator.clipboard.writeText(clePubliqueEnTexte(fichierClePublique(id)));
-              notifier('Clé publique copiée : collez-la dans un message au responsable.', 'succes');
+              notifier(t('accueil.cle_copiee'), 'succes');
             } catch {
-              notifier('Copie impossible : utilisez plutôt le fichier.', 'erreur');
+              notifier(t('accueil.copie_impossible'), 'erreur');
             }
           },
           'principal',
         ),
-        bouton('Télécharger ma clé publique (.json)', () =>
+        bouton(t('accueil.telecharger_cle'), () =>
           telecharger(`2x2_cle_publique_${nomDeFichierSur(id.nom)}.json`, JSON.stringify(fichierClePublique(id), null, 2), 'application/json'),
         ),
       ),
-      h('p', { class: 'aide' }, 'Vous pouvez la retransmettre à tout moment. Vérifiez ensuite l’empreinte de vive voix avec le responsable (téléphone), en dehors de l’outil.'),
+      h('p', { class: 'aide' }, t('accueil.retransmettre')),
     ),
     carteReprise(),
     h(
       'div',
       { class: 'grille-2' },
-      carte('Ouvrir une liste', ouvrir),
+      carte(t('accueil.ouvrir_liste'), ouvrir),
       carte(
-        'Nouvelle liste (responsable)',
-        h('p', null, 'Importez un export KoboToolbox ou d’une plateforme de paiement (XLSX ou CSV). L’original sera figé et son empreinte calculée.'),
-        bouton('Importer un export…', () => aller('import'), 'principal'),
+        t('accueil.nouvelle_liste'),
+        h('p', null, t('accueil.nouvelle_liste_texte')),
+        bouton(t('accueil.importer'), () => aller('import'), 'principal'),
       ),
     ),
     donneesFictives(),
@@ -251,29 +248,27 @@ function donneesFictives() {
   return h(
     'details',
     { class: 'fictif' },
-    h('summary', null, 'Données fictives pour la démonstration'),
+    h('summary', null, t('accueil.fictif')),
     h(
       'p',
       null,
-      h('strong', null, 'Tester seul : '),
-      'jouez une personne par navigateur (par exemple Firefox et Chrome), ou rechargez la page pour changer de personne. ',
-      'Chaque personne a sa clé ; le responsable ajoute la clé publique de l’autre à l’import.',
+      tr('accueil.fictif_seul'),
     ),
     h(
       'p',
       null,
-      'Génère un export Kobo simulé d’environ 300 ménages fictifs (MN-xxxx, deux territoires fictifs), avec des anomalies plantées en proportion connue.',
+      t('accueil.fictif_texte'),
     ),
     h(
       'div',
       { class: 'ligne' },
-      bouton('Télécharger (XLSX)', () =>
-        occupe('Génération…', async () => {
+      bouton(t('accueil.telecharger_xlsx'), () =>
+        occupe(t('accueil.generation'), async () => {
           const { tableau } = genererDonneesFictives();
           telecharger('kobo_fictif.xlsx', await ecrireXlsx([{ nom: 'donnees_fictives', tableau }]));
         }),
       ),
-      bouton('Télécharger (CSV)', () => {
+      bouton(t('accueil.telecharger_csv'), () => {
         const { tableau } = genererDonneesFictives();
         telecharger('kobo_fictif.csv', ecrireCsv(tableau, ','), 'text/csv');
       }),

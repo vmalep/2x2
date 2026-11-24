@@ -11,16 +11,20 @@ import { ecrireOds } from '../io/ods.ts';
 import type { Tableau } from '../io/tableau.ts';
 import { ecrireXlsx, type FeuilleXlsx } from '../io/xlsx.ts';
 import { journaliserExport, type Etat } from './journal.ts';
-import { CHAMP_STATUT, DECISIONS_ALERTE, type ContenuExport, type Liste } from './types.ts';
+import { CHAMP_STATUT, DECISIONS_ALERTE, libelleMotif, type ContenuExport, type Liste } from './types.ts';
+import { langueCourante, libelles, t } from '../i18n/index.ts';
+
+/** Version de l'outil (définie à la compilation ; absente dans les tests). */
+const VERSION = typeof __VERSION__ === 'string' ? __VERSION__ : '?';
 
 export type Nature = ContenuExport['nature'];
 
-export const LIBELLES_NATURE: Record<Nature, string> = {
-  liste: 'Liste finale',
-  rapport: 'Rapport des alertes et des corrections',
-  visite: 'Liste de visite terrain',
-  kobo: 'Préchargement Kobo (revisite)',
-};
+export const LIBELLES_NATURE: Record<Nature, string> = libelles({
+  liste: 'nature.liste',
+  rapport: 'nature.rapport',
+  visite: 'nature.visite',
+  kobo: 'nature.kobo',
+});
 export type FormatExport = ContenuExport['format'];
 
 export interface Blocage {
@@ -39,8 +43,11 @@ export function exportPossible(b: Blocage): boolean {
   return b.correctionsEnAttente === 0 && b.alertesSansDecision === 0;
 }
 
-const nomAuteur = (etat: Etat, empreinte: string) => etat.utilisateurs.get(empreinte)?.nom ?? 'inconnu';
+const nomAuteur = (etat: Etat, empreinte: string) => etat.utilisateurs.get(empreinte)?.nom ?? t('session.auteur_inconnu');
 const date = (iso: string) => iso.replace('T', ' ').slice(0, 19) + ' UTC';
+
+/** Statut inclus / exclu (code du journal), tel qu'affiché. */
+const libelleStatut = (s: string) => (s === 'exclu' ? t('statut.exclu') : s === 'inclus' ? t('statut.inclus') : s);
 
 function idsMenages(etat: Etat): string[] {
   const o = etat.original;
@@ -60,7 +67,7 @@ export function tableauListeFinale(etat: Etat): Tableau {
 
 export function tableauAlertes(etat: Etat, alertes: Alerte[]): Tableau {
   return {
-    colonnes: ['Alerte', 'Contrôle', 'Ménages', 'Constat', 'Décision', 'Décidée par', 'Le', 'Commentaire', 'Décision équipe (à remplir)', 'Commentaire équipe'],
+    colonnes: (['alerte', 'controle', 'menages', 'constat', 'decision', 'decidee_par', 'le', 'commentaire', 'decision_equipe', 'commentaire_equipe'] as const).map((c) => t(`rapport.${c}`)),
     lignes: alertes.map((a) => {
       const d = etat.decisionsAlertes.get(a.id);
       return [
@@ -81,20 +88,20 @@ export function tableauAlertes(etat: Etat, alertes: Alerte[]): Tableau {
 
 export function tableauCorrections(etat: Etat): Tableau {
   return {
-    colonnes: ['N°', 'Ménage', 'Champ', 'Ancienne valeur', 'Nouvelle valeur', 'Motif', 'Commentaire', 'Proposée par', 'Le', 'Statut', 'Décidée par', 'Le (décision)', 'Commentaire (décision)'],
+    colonnes: (['numero', 'menage', 'champ', 'ancienne', 'nouvelle', 'motif', 'commentaire', 'proposee_par', 'le', 'statut', 'decidee_par', 'le_decision', 'commentaire_decision'] as const).map((c) => t(`rapport.${c}`)),
     lignes: [...etat.corrections.values()].map((c) => {
       const e = c.entree;
       return [
         String(e.n),
         e.contenu.menage,
-        e.contenu.champ === CHAMP_STATUT ? 'Statut du ménage' : e.contenu.champ,
-        e.contenu.ancienne,
-        e.contenu.nouvelle,
-        e.contenu.motif,
+        e.contenu.champ === CHAMP_STATUT ? t('correction.statut_menage') : e.contenu.champ,
+        e.contenu.champ === CHAMP_STATUT ? libelleStatut(e.contenu.ancienne) : e.contenu.ancienne,
+        e.contenu.champ === CHAMP_STATUT ? libelleStatut(e.contenu.nouvelle) : e.contenu.nouvelle,
+        libelleMotif(e.contenu.motif),
         e.contenu.commentaire,
         nomAuteur(etat, e.auteur),
         date(e.le),
-        c.statut === 'en_attente' ? 'en attente' : c.statut === 'acceptee' ? 'acceptée' : 'refusée',
+        c.statut === 'en_attente' ? t('correction.en_attente') : c.statut === 'acceptee' ? t('correction.acceptee') : t('correction.refusee'),
         c.decision ? nomAuteur(etat, c.decision.auteur) : '',
         c.decision ? date(c.decision.le) : '',
         c.decision?.contenu.commentaire ?? '',
@@ -108,18 +115,19 @@ export function tableauMetadonnees(liste: Liste, etat: Etat, nature: Nature, aut
   const ids = idsMenages(etat);
   const exclus = ids.filter((id) => etat.estExclu(id)).length;
   return {
-    colonnes: ['Élément', 'Valeur'],
+    colonnes: [t('meta.element'), t('meta.valeur')],
     lignes: [
-      ['Outil', '2x2 (prototype, données fictives uniquement)'],
-      ['Nature', LIBELLES_NATURE[nature]],
-      ['Fichier d’origine', liste.original.nomFichier],
-      ['Empreinte SHA-256 du fichier d’origine', liste.original.empreinteFichier],
-      ['Ménages : origine / inclus / exclus', `${ids.length} / ${ids.length - exclus} / ${exclus}`],
-      ['Lignes du journal', String(liste.journal.length)],
-      ['Empreinte de la dernière ligne du journal', derniere.empreinte],
-      ['Exporté par', auteur],
-      ['Le', date(le)],
-      ['Vérification', 'Ouvrez la liste chiffrée dans 2x2, écran Export, « Vérifier un fichier exporté ».'],
+      [t('meta.outil'), t('meta.outil_valeur', { version: VERSION })],
+      [t('meta.nature'), LIBELLES_NATURE[nature]],
+      [t('meta.fichier'), liste.original.nomFichier],
+      [t('meta.empreinte_fichier'), liste.original.empreinteFichier],
+      [t('meta.menages'), `${ids.length} / ${ids.length - exclus} / ${exclus}`],
+      [t('meta.lignes'), String(liste.journal.length)],
+      [t('meta.empreinte_journal'), derniere.empreinte],
+      [t('meta.par'), auteur],
+      [t('rapport.le'), date(le)],
+      [t('meta.langue'), langueCourante()],
+      [t('meta.verification'), t('meta.verification_texte')],
     ],
   };
 }
@@ -150,12 +158,13 @@ export async function construireExport(
     if (format === 'csv') {
       return { nomFichier, octets: new TextEncoder().encode(ecrireCsv(tableauListeFinale(etat), ',')) as Octets, type: 'text/csv' };
     }
-    feuilles = [{ nom: 'Liste finale', tableau: tableauListeFinale(etat) }, meta];
+    // Liste finale : colonnes de l'export d'origine, inchangées (seul le nom de la feuille est traduit).
+    feuilles = [{ nom: t('nature.liste'), tableau: tableauListeFinale(etat) }, meta];
   } else {
-    if (format === 'csv') throw new Error('Le rapport des alertes est disponible en XLSX ou ODS.');
+    if (format === 'csv') throw new Error(t('export.err_rapport_csv'));
     feuilles = [
-      { nom: 'Alertes', tableau: tableauAlertes(etat, alertes), largeurs: [30, 26, 22, 60, 26, 18, 20, 40, 26, 40] },
-      { nom: 'Corrections', tableau: tableauCorrections(etat) },
+      { nom: t('rapport.feuille_alertes'), tableau: tableauAlertes(etat, alertes), largeurs: [30, 26, 22, 60, 26, 18, 20, 40, 26, 40] },
+      { nom: t('rapport.feuille_corrections'), tableau: tableauCorrections(etat) },
       meta,
     ];
   }
@@ -175,8 +184,8 @@ export async function exporter(
 ): Promise<FichierExporte> {
   // Le rapport des alertes est un document de travail : il reste exportable à tout moment.
   const b = nature === 'liste' ? blocages(etat, alertes) : { correctionsEnAttente: 0, alertesSansDecision: 0 };
-  if (b.correctionsEnAttente) throw new Error(`Export verrouillé : ${b.correctionsEnAttente} correction(s) en attente de validation.`);
-  if (b.alertesSansDecision) throw new Error(`Export verrouillé : ${b.alertesSansDecision} alerte(s) sans décision.`);
+  if (b.correctionsEnAttente) throw new Error(t('export.err_attente', { n: b.correctionsEnAttente }));
+  if (b.alertesSansDecision) throw new Error(t('export.err_alertes', { n: b.alertesSansDecision }));
   const derniere = liste.journal.at(-1)!;
   const fichier = await construireExport(liste, etat, alertes, nature, format, identite.nom);
   await journaliserExport(liste, etat, identite, {

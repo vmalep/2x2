@@ -6,13 +6,14 @@ import { lireExport } from '../io/import.ts';
 import { ecrireOds } from '../io/ods.ts';
 import { ecrireXlsx, type FeuilleXlsx } from '../io/xlsx.ts';
 import { reglesDepuisTableau, tableauAide, tableauDepuisRegles, validerRegles, type Regle } from './regles.ts';
+import { t } from '../i18n/index.ts';
 
 export type FormatRegles = 'xlsx' | 'ods' | 'csv';
 
 export async function exporterRegles(regles: Regle[], colonnesListe: string[], format: FormatRegles): Promise<{ octets: Octets; type: string }> {
   const feuilles: FeuilleXlsx[] = [
-    { nom: 'Règles', tableau: tableauDepuisRegles(regles), largeurs: [7, 24, 40, 18, 26, 26, 10, 10, 30] },
-    { nom: 'Aide', tableau: tableauAide(colonnesListe), largeurs: [22, 34, 110] },
+    { nom: t('fichier.feuille_regles'), tableau: tableauDepuisRegles(regles), largeurs: [7, 24, 40, 18, 26, 26, 10, 10, 30] },
+    { nom: t('fichier.feuille_aide'), tableau: tableauAide(colonnesListe), largeurs: [22, 34, 110] },
   ];
   if (format === 'csv') return { octets: new TextEncoder().encode(ecrireCsv(feuilles[0].tableau)) as Octets, type: 'text/csv' };
   if (format === 'ods') return { octets: await ecrireOds(feuilles), type: 'application/vnd.oasis.opendocument.spreadsheet' };
@@ -36,6 +37,6 @@ export async function importerRegles(octets: Octets, nomFichier: string, colonne
     return { regles: [], erreurs: [(e as Error).message], nomFichier, empreinteFichier };
   }
   const erreurs = [...lu.erreurs, ...validerRegles(lu.regles, colonnesListe)];
-  if (!lu.regles.length) erreurs.push('Le fichier ne contient aucune règle.');
+  if (!lu.regles.length) erreurs.push(t('regles.err_vide'));
   return { regles: lu.regles, erreurs, nomFichier, empreinteFichier };
 }

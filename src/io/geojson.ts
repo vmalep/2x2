@@ -4,6 +4,7 @@
  * plans d'eau, forêts, bâtiments, limites administratives et noms de lieux. Le reste est ignoré.
  * Les coordonnées sont converties une fois pour toutes en projection Web Mercator normalisée (0..1).
  */
+import { t } from '../i18n/index.ts';
 
 export type ClasseFond =
   | 'eau'
@@ -114,7 +115,7 @@ export function lireFondVectoriel(fichiers: { nom: string; texte: string }[]): F
     }
   }
   if (!elements.length) {
-    throw new Error('Aucun élément de carte reconnu (routes, rivières, lieux…) : le fichier doit être un GeoJSON, par exemple un export du HOT Export Tool.');
+    throw new Error(t('err.geojson'));
   }
   let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const e of elements) {
@@ -127,7 +128,7 @@ export function lireFondVectoriel(fichiers: { nom: string; texte: string }[]): F
       }
     }
   }
-  return { elements, emprise: [x0, y0, x1, y1], attribution: osm ? '© contributeurs OpenStreetMap (ODbL)' : undefined };
+  return { elements, emprise: [x0, y0, x1, y1], attribution: osm ? t('fond.attribution') : undefined };
 }
 
 /**
@@ -135,7 +136,7 @@ export function lireFondVectoriel(fichiers: { nom: string; texte: string }[]): F
  * élargie et arrondie vers l'extérieur au pas donné (0,1° ≈ 11 km), pour ne révéler que la région.
  */
 export function zoneArrondie(points: { lat: number; lon: number }[], marge = 0.05, pas = 0.1): { ouest: number; sud: number; est: number; nord: number } {
-  if (!points.length) throw new Error('Aucun point GPS.');
+  if (!points.length) throw new Error(t('err.aucun_point'));
   const arrondi = (x: number, haut: boolean) => Number(((haut ? Math.ceil(x / pas) : Math.floor(x / pas)) * pas).toFixed(6));
   const lats = points.map((p) => p.lat);
   const lons = points.map((p) => p.lon);

@@ -140,7 +140,7 @@ describe('Chaque type de règle', () => {
     e.modifications.set('M3', new Map([[CHAMP_STATUT, 'exclu']]));
     const requis = calculerAlertes(e, [regle({ type: 'lien_requis', colonne: 'hote', liste: 'statut=accueil' })]);
     expect(requis.map((a) => a.menages[0]).sort()).toEqual(['M1', 'M4']);
-    expect(requis.find((a) => a.menages[0] === 'M1')!.message).toMatch(/2 ménage\(s\) rattaché\(s\) exclu\(s\)/);
+    expect(requis.find((a) => a.menages[0] === 'M1')!.message).toMatch(/2 ménages rattachés exclus/);
   });
   it('lien saisi dans un sens ou dans l’autre ; codes sans casse ni tiret ; contradictions', () => {
     const e = new Etat({

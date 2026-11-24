@@ -3,6 +3,7 @@
  * ou colonnes séparées _xxx_latitude / _xxx_longitude), distances et regroupements.
  * Aucun fond de carte ni service en ligne : tout est calculé localement.
  */
+import { langueCourante } from '../i18n/index.ts';
 
 export interface Point {
   lat: number;
@@ -36,7 +37,7 @@ export function distance(a: Point, b: Point): number {
 
 export function formatDistance(m: number): string {
   if (m < 1000) return `${Math.round(m)} m`;
-  return `${(Math.round(m / 100) / 10).toLocaleString('fr')} km`;
+  return `${(Math.round(m / 100) / 10).toLocaleString(langueCourante())} km`;
 }
 
 /**

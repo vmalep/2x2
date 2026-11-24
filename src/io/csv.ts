@@ -1,5 +1,6 @@
 /** Lecture et écriture CSV (RFC 4180), avec détection du séparateur et du BOM UTF-8. */
 import { normaliser, type Tableau } from './tableau.ts';
+import { t } from '../i18n/index.ts';
 
 function detecterSeparateur(texte: string): string {
   const premiereLigne = texte.split(/\r?\n/, 1)[0] ?? '';
@@ -44,7 +45,7 @@ export function lireCsv(texte: string, separateur?: string): Tableau {
       champ = '';
     } else champ += c;
   }
-  if (guillemets) throw new Error('CSV invalide : guillemet non fermé.');
+  if (guillemets) throw new Error(t('err.csv'));
   if (champ !== '' || ligne.length) {
     ligne.push(champ);
     lignes.push(ligne);

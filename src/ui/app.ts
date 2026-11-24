@@ -9,13 +9,16 @@ import { ecranJournal } from './ecrans/journal.ts';
 import { ecranValidation } from './ecrans/validation.ts';
 import { enregistrementDirect } from './fichiers.ts';
 import { suivreHauteur } from './hauteurs.ts';
-import { alertesCourantes, aller, enregistrer, versionListe, fermerListe, moi, occupe, session, surRafraichissement, type Ecran } from './session.ts';
+import { alertesCourantes, aller, enregistrer, versionListe, fermerListe, moi, occupe, rafraichir, session, surRafraichissement, type Ecran } from './session.ts';
+import { LIBELLES_ROLES } from '../model/types.ts';
+import { LANGUES, NOMS_LANGUES, langueCourante, t, type Cle, type Langue } from '../i18n/index.ts';
+import { choisirLangue } from './langue.ts';
 
-const ETAPES: { ecran: Ecran; libelle: string }[] = [
-  { ecran: 'import', libelle: 'Import' },
-  { ecran: 'correction', libelle: 'Correction' },
-  { ecran: 'validation', libelle: 'Validation' },
-  { ecran: 'export', libelle: 'Export' },
+const ETAPES: { ecran: Ecran; libelle: Cle }[] = [
+  { ecran: 'import', libelle: 'nav.import' },
+  { ecran: 'correction', libelle: 'nav.correction' },
+  { ecran: 'validation', libelle: 'nav.validation' },
+  { ecran: 'export', libelle: 'nav.export' },
 ];
 
 function navigation(): Enfant {
@@ -25,7 +28,7 @@ function navigation(): Enfant {
   const alertesOuvertes = etat ? alertesCourantes().filter((a) => !etat.decisionsAlertes.has(a.id)).length : 0;
   return h(
     'nav',
-    { class: 'navigation', 'aria-label': 'Étapes' },
+    { class: 'navigation', 'aria-label': t('nav.etapes') },
     h(
       'ol',
       null,
@@ -46,7 +49,7 @@ function navigation(): Enfant {
               },
             },
             h('span', { class: 'numero' }, String(i + 1)),
-            e.libelle,
+            t(e.libelle),
             e.ecran === 'validation' && attente + alertesOuvertes > 0 && h('span', { class: 'pastille' }, String(attente + alertesOuvertes)),
           ),
         ),
@@ -58,7 +61,7 @@ function navigation(): Enfant {
           'button',
           { type: 'button', class: session.ecran === 'journal' ? 'actif' : '', disabled: !ouverte, onclick: () => aller('journal') },
           h('span', { class: 'numero' }, '≡'),
-          'Journal',
+          t('nav.journal'),
           session.verification && !session.verification.valide && h('span', { class: 'pastille rouge' }, '!'),
         ),
       ),
@@ -69,11 +72,11 @@ function navigation(): Enfant {
           'button',
           { type: 'button', class: session.ecran === 'aide' ? 'actif' : '', onclick: () => aller('aide') },
           h('span', { class: 'numero' }, '?'),
-          'Aide',
+          t('nav.aide'),
         ),
       ),
     ),
-    h('p', { class: 'mention-locale' }, 'Traitement local : aucune donnée ne quitte ce poste en clair.'),
+    h('p', { class: 'mention-locale' }, t('nav.local')),
   );
 }
 
@@ -83,32 +86,50 @@ function entete(): Enfant {
   return h(
     'header',
     { class: 'entete' },
-    h('button', { type: 'button', class: 'logo', onclick: () => aller(liste ? 'correction' : 'accueil'), 'aria-label': 'Accueil' }, h('span', { class: 'marque-logo', 'aria-hidden': 'true' }, h('i'), h('i')), '2x2', h('span', { class: 'version', title: 'Version de l’outil' }, `v${__VERSION__}`)),
-    h('span', { class: 'prototype' }, 'Prototype · données fictives uniquement'),
+    h('button', { type: 'button', class: 'logo', onclick: () => aller(liste ? 'correction' : 'accueil'), 'aria-label': t('entete.accueil') }, h('span', { class: 'marque-logo', 'aria-hidden': 'true' }, h('i'), h('i')), '2x2', h('span', { class: 'version', title: t('entete.version_outil') }, `v${__VERSION__}`)),
+    h('span', { class: 'prototype' }, t('entete.prototype')),
     h('div', { class: 'espace' }),
-    !identite && h('button', { type: 'button', class: `lien${session.ecran === 'aide' ? ' actif' : ''}`, onclick: () => aller('aide') }, 'Aide'),
+    choixLangue(),
+    !identite && h('button', { type: 'button', class: `lien${session.ecran === 'aide' ? ' actif' : ''}`, onclick: () => aller('aide') }, t('nav.aide')),
     liste &&
       h(
         'div',
         { class: 'etat-liste' },
-        verification?.valide ? badge('Journal intègre', 'ok') : badge('Journal altéré', 'refus'),
+        verification?.valide ? badge(t('entete.journal_integre'), 'ok') : badge(t('entete.journal_altere'), 'refus'),
         h('span', { class: 'nom-liste', title: session.nomFichierListe }, session.nomFichierListe ?? ''),
         (() => {
           const v = versionListe(liste);
-          return h('span', { class: 'version-liste', title: `Version de la liste : ${v.numero} entrées au journal. Le nom des fichiers enregistrés porte ce numéro.` }, v.texte);
+          return h('span', { class: 'version-liste', title: t('entete.version_liste', { n: v.numero }) }, v.texte);
         })(),
-        session.nonEnregistre && badge('non enregistré', 'attente'),
-        bouton(enregistrementDirect ? 'Enregistrer…' : 'Enregistrer (télécharger)', () => occupe('Chiffrement…', () => enregistrer()), session.nonEnregistre ? 'principal' : 'secondaire'),
-        bouton('Fermer', fermerListe),
+        session.nonEnregistre && badge(t('entete.non_enregistre'), 'attente'),
+        bouton(enregistrementDirect ? t('entete.enregistrer') : t('entete.enregistrer_telecharger'), () => occupe(t('entete.chiffrement'), () => enregistrer()), session.nonEnregistre ? 'principal' : 'secondaire'),
+        bouton(t('commun.fermer'), fermerListe),
       ),
     identite &&
       h(
         'div',
         { class: 'identite' },
         h('strong', null, identite.nom),
-        u && h('span', { class: 'discret' }, u.roles.join(', ')),
+        u && h('span', { class: 'discret' }, u.roles.map((r) => LIBELLES_ROLES[r]).join(', ')),
         h('span', { class: 'petite' }, empreinte(identite.empreinte, 2)),
       ),
+  );
+}
+
+/** Sélecteur FR / EN de l'en-tête : la page est redessinée dans la langue choisie. */
+function choixLangue(): Enfant {
+  return h(
+    'select',
+    {
+      class: 'choix-langue',
+      'aria-label': t('langue.choix'),
+      title: t('langue.choix'),
+      onchange: (e: Event) => {
+        choisirLangue((e.target as HTMLSelectElement).value as Langue);
+        rafraichir();
+      },
+    },
+    LANGUES.map((l) => h('option', { value: l, selected: l === langueCourante(), title: NOMS_LANGUES[l] }, l.toUpperCase())),
   );
 }
 

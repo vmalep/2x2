@@ -7,6 +7,7 @@
  */
 import { chiffrerListe } from '../model/fichier-liste.ts';
 import type { Liste } from '../model/types.ts';
+import { t } from '../i18n/index.ts';
 
 const CLE = '2x2-secours';
 
@@ -70,7 +71,7 @@ export function programmerSecours(liste: Liste, motDePasse: string, nomFichier: 
       // Entre-temps, la liste a pu être enregistrée ou fermée : on n'écrit plus rien.
       if (moi !== generation) return;
       const s = stockage();
-      if (!s) throw new Error('le stockage du navigateur n’est pas disponible pour cette page');
+      if (!s) throw new Error(t('secours.stockage_indisponible'));
       const secours: Secours = { format: '2x2-secours', nomFichier, version: version(), le: new Date().toISOString(), contenu };
       s.setItem(CLE, JSON.stringify(secours));
     } catch (e) {

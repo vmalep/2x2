@@ -4,6 +4,7 @@ import { lireCsv } from './csv.ts';
 import { lireOds } from './ods.ts';
 import type { Tableau } from './tableau.ts';
 import { lireXlsx } from './xlsx.ts';
+import { t } from '../i18n/index.ts';
 
 export async function lireExport(octets: Octets, nomFichier: string): Promise<Tableau> {
   const estZip = octets[0] === 0x50 && octets[1] === 0x4b;
@@ -12,7 +13,7 @@ export async function lireExport(octets: Octets, nomFichier: string): Promise<Ta
     const debut = new TextDecoder().decode(octets.subarray(30, 84));
     return debut.startsWith('mimetypeapplication/vnd.oasis.opendocument.spreadsheet') ? lireOds(octets) : lireXlsx(octets);
   }
-  if (/\.xlsx?$/i.test(nomFichier)) throw new Error('Ce fichier n’est pas un XLSX valide (les anciens .xls ne sont pas pris en charge).');
+  if (/\.xlsx?$/i.test(nomFichier)) throw new Error(t('err.xls'));
   let texte: string;
   try {
     texte = depuisUtf8(octets);

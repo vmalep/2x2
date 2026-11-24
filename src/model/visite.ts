@@ -14,9 +14,13 @@ import { ecrireXlsx, type FeuilleXlsx } from '../io/xlsx.ts';
 import { LARGEURS_META, tableauMetadonnees, type FichierExporte, type FormatExport } from './export.ts';
 import { journaliserExport, type Etat } from './journal.ts';
 import type { Liste } from './types.ts';
+import { langueCourante, t, tl, type Langue } from '../i18n/index.ts';
 
-/** Colonnes laissées vides, à remplir par l'équipe de terrain. */
-export const COLONNES_RETOUR = ['Date de visite', 'Ménage trouvé (oui/non)', 'Constat', 'Champ à corriger', 'Valeur constatée', 'Visité par'];
+/** Colonnes laissées vides, à remplir par l'équipe de terrain (dans la langue de l'utilisateur). */
+const CLES_RETOUR = ['visite.retour_date', 'visite.retour_trouve', 'visite.retour_constat', 'visite.retour_champ', 'visite.retour_valeur', 'visite.retour_visiteur'] as const;
+export const colonnesRetour = (l: Langue = langueCourante()): string[] => CLES_RETOUR.map((c) => tl(l, c));
+/** Colonne « À vérifier » (alertes du ménage). */
+export const colonneAVerifier = (l: Langue = langueCourante()): string => tl(l, 'visite.retour_a_verifier');
 
 /** Nom conseillé pour la pièce jointe du formulaire Kobo (référencé par le formulaire). */
 export const NOM_PRECHARGEMENT = 'menages_a_revoir.csv';
@@ -37,12 +41,12 @@ function base(liste: Liste): string {
 
 export function tableauVisite(etat: Etat, d: DemandeVisite): Tableau {
   return {
-    colonnes: [etat.original.colonneId, ...d.colonnes.filter((c) => c !== etat.original.colonneId), 'À vérifier', ...COLONNES_RETOUR],
+    colonnes: [etat.original.colonneId, ...d.colonnes.filter((c) => c !== etat.original.colonneId), colonneAVerifier(), ...colonnesRetour()],
     lignes: d.ids.map((id) => [
       id,
       ...d.colonnes.filter((c) => c !== etat.original.colonneId).map((c) => etat.valeur(id, c) ?? ''),
       d.aVerifier.get(id) ?? '',
-      ...COLONNES_RETOUR.map(() => ''),
+      ...colonnesRetour().map(() => ''),
     ]),
   };
 }
@@ -63,7 +67,7 @@ export function nomKobo(colonne: string): string {
  * colonne « name » (identifiant), « label » (ce qui s'affiche dans la liste de choix),
  * puis les colonnes choisies et ce qu'il faut vérifier. Rien d'autre.
  */
-const comparateur = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
+const comparateur = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 function trierPourEtiquette(ids: string[], colonnes: string[], etat: Etat): string[] {
   return [...ids].sort((a, b) => {
@@ -97,7 +101,7 @@ export function tableauPrechargementKobo(etat: Etat, d: DemandeVisite): Tableau 
     lignes: trierPourEtiquette(d.ids, pourEtiquette, etat).map((id) => {
       const valeurs = autres.map((c) => etat.valeur(id, c) ?? '');
       // « infos » : toutes les colonnes choisies, affichées par le formulaire une fois le ménage sélectionné.
-      const infos = autres.map((c, i) => `${c} : ${valeurs[i] || '—'}`).join(' · ');
+      const infos = autres.map((c, i) => t('visite.infos', { colonne: c, valeur: valeurs[i] || '—' })).join(' · ');
       return [id, etiquetteDe(id), infos, ...valeurs, d.aVerifier.get(id) ?? ''];
     }),
   };
@@ -107,12 +111,7 @@ export function tableauPrechargementKobo(etat: Etat, d: DemandeVisite): Tableau 
 function consignes(): Tableau {
   return {
     colonnes: ['', ''],
-    lignes: [
-      ['À quoi sert cette liste', 'Retrouver et vérifier les ménages (visite ou appel). Les colonnes de droite servent de notes pour l’équipe.'],
-      ['Retour des résultats', 'Cette liste ne se réimporte pas. Les résultats sont saisis dans 2x2 : décisions d’alerte (écran Validation), corrections et exclusions (écran Correction), signées et validées par une autre personne.'],
-      ['Avec Kobo', 'Pour des réponses contrôlées et une preuve de visite (GPS, heure), utilisez plutôt le formulaire Kobo de revisite : ses réponses se réimportent dans 2x2 (« Retours du terrain… »).'],
-      ['Données personnelles', 'Fichier en clair : canal sûr, accès limité à l’équipe, suppression après la mission.'],
-    ],
+    lignes: (['usage', 'retour', 'kobo', 'donnees'] as const).map((k) => [t(`consignes.${k}`), t(`consignes.${k}_texte`)]),
   };
 }
 
@@ -135,10 +134,10 @@ export async function construireVisite(
   const tableau = tableauVisite(etat, d);
   if (format === 'csv') return { nomFichier, octets: new TextEncoder().encode(ecrireCsv(tableau, ',')) as Octets, type: 'text/csv' };
   const meta = tableauMetadonnees(liste, etat, 'visite', auteur, le);
-  meta.lignes.push(['Données personnelles', 'Fichier en clair : à transmettre par un canal sûr et à supprimer après la mission.']);
+  meta.lignes.push([t('meta.donnees_personnelles'), t('meta.donnees_personnelles_texte')]);
   const feuilles: FeuilleXlsx[] = [
-    { nom: 'Visites', tableau, largeurs: [14, ...d.colonnes.filter((c) => c !== etat.original.colonneId).map(() => 20), 60, 16, 14, 40, 22, 22, 20] },
-    { nom: 'Consignes', tableau: consignes(), largeurs: [26, 110] },
+    { nom: t('visite.feuille_visites'), tableau, largeurs: [14, ...d.colonnes.filter((c) => c !== etat.original.colonneId).map(() => 20), 60, 16, 14, 40, 22, 22, 20] },
+    { nom: t('visite.feuille_consignes'), tableau: consignes(), largeurs: [26, 110] },
     { nom: '2x2', tableau: meta, largeurs: LARGEURS_META },
   ];
   return format === 'xlsx'
@@ -155,7 +154,7 @@ export async function exporterVisite(
   nature: 'visite' | 'kobo',
   format: FormatExport,
 ): Promise<FichierExporte> {
-  if (!d.ids.length) throw new Error('Aucun ménage choisi.');
+  if (!d.ids.length) throw new Error(t('err.aucun_menage'));
   const derniere = liste.journal.at(-1)!;
   const fichier = await construireVisite(liste, etat, d, nature, nature === 'kobo' ? 'csv' : format, identite.nom);
   await journaliserExport(liste, etat, identite, {

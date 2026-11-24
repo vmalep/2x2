@@ -5,16 +5,17 @@ import type { Tableau } from '../../io/tableau.ts';
 import { creerListe, declarerUtilisateur } from '../../model/journal.ts';
 import { LIBELLES_ROLES, type Role, type Utilisateur } from '../../model/types.ts';
 import { badge, bouton, carte, champ, empreinte, encadre, motDePasse } from '../composants.ts';
-import { h, remplacer } from '../dom.ts';
+import { h, remplacer, tr } from '../dom.ts';
 import { choisirFichier, lireFichier, nomDeFichierSur, type FichierLu } from '../fichiers.ts';
 import { apresModification, enregistrer, moi, notifier, occupe, rafraichir, session } from '../session.ts';
+import { localeCourante, t } from '../../i18n/index.ts';
 
 const ROLES: Role[] = ['responsable', 'correction', 'validation'];
 
 /** Propose la colonne d'identifiant : un nom évocateur, sinon la première colonne aux valeurs uniques. */
-function colonneIdProbable(t: Tableau): string {
-  const uniques = t.colonnes.filter((_, i) => {
-    const v = t.lignes.map((l) => l[i]);
+function colonneIdProbable(tab: Tableau): string {
+  const uniques = tab.colonnes.filter((_, i) => {
+    const v = tab.lignes.map((l) => l[i]);
     return v.every((x) => x.trim()) && new Set(v).size === v.length;
   });
   return (
@@ -22,7 +23,7 @@ function colonneIdProbable(t: Tableau): string {
     uniques.find((c) => !c.startsWith('_')) ??
     uniques.find((c) => c === '_uuid') ??
     uniques[0] ??
-    t.colonnes[0]
+    tab.colonnes[0]
   );
 }
 
@@ -30,7 +31,7 @@ function tableauUtilisateurs(utilisateurs: Utilisateur[], modifiable: boolean, s
   return h(
     'table',
     { class: 'tableau' },
-    h('thead', null, h('tr', null, h('th', null, 'Nom'), h('th', null, 'Empreinte de la clé'), ...ROLES.map((r) => h('th', null, LIBELLES_ROLES[r])), modifiable && h('th', null, ''))),
+    h('thead', null, h('tr', null, h('th', null, t('import.col_nom')), h('th', null, t('import.col_empreinte')), ...ROLES.map((r) => h('th', null, LIBELLES_ROLES[r])), modifiable && h('th', null, ''))),
     h(
       'tbody',
       null,
@@ -38,7 +39,7 @@ function tableauUtilisateurs(utilisateurs: Utilisateur[], modifiable: boolean, s
         h(
           'tr',
           null,
-          h('td', null, u.nom, u.empreinte === session.identite?.empreinte && ' (vous)'),
+          h('td', null, u.nom, u.empreinte === session.identite?.empreinte && t('import.vous')),
           h('td', null, empreinte(u.empreinte)),
           ...ROLES.map((r) =>
             h(
@@ -66,7 +67,7 @@ function tableauUtilisateurs(utilisateurs: Utilisateur[], modifiable: boolean, s
               'td',
               null,
               i > 0 &&
-                bouton('Retirer', () => {
+                bouton(t('import.retirer'), () => {
                   utilisateurs.splice(i, 1);
                   surChangement();
                 }),
@@ -94,16 +95,16 @@ async function lireClePublique(): Promise<Utilisateur | undefined> {
 
 /** Zone pour coller une clé publique reçue par message (code « 2X2-CLE-1. »). */
 function zoneCollage(surAjout: (u: Utilisateur) => void) {
-  const texte = h('textarea', { rows: 3, placeholder: 'Collez ici la clé publique reçue par message', 'aria-label': 'Clé publique collée' });
+  const texte = h('textarea', { rows: 3, placeholder: t('import.coller_placeholder'), 'aria-label': t('import.cle_collee') });
   return h(
     'details',
     { class: 'collage' },
-    h('summary', null, 'Coller une clé publique reçue par message'),
+    h('summary', null, t('import.coller')),
     texte,
     h(
       'div',
       { class: 'ligne' },
-      bouton('Ajouter cette clé', async () => {
+      bouton(t('import.ajouter_cle'), async () => {
         const u = await utilisateurDepuisTexte(texte.value);
         if (u) surAjout(u);
       }),
@@ -125,7 +126,7 @@ function nouvelleListe() {
   const mdp2 = motDePasse('', 'new-password');
 
   const charger = (f: FichierLu) =>
-    occupe('Lecture de l’export et calcul de l’empreinte…', async () => {
+    occupe(t('import.lecture'), async () => {
       const tableau = await lireExport(f.octets, f.nom);
       Object.assign(etat, { tableau, nomFichier: f.nom, empreinteFichier: await sha256Hex(f.octets), colonneId: colonneIdProbable(tableau) });
       dessiner();
@@ -156,60 +157,57 @@ function nouvelleListe() {
         if (f) charger(await lireFichier(f));
       },
     },
-    h('strong', null, 'Déposez ici l’export (KoboToolbox ou plateforme de paiement)'),
-    h('span', null, 'ou cliquez pour choisir un fichier XLSX ou CSV'),
+    h('strong', null, t('import.deposer')),
+    h('span', null, t('import.deposer_aide')),
   );
 
   function dessiner() {
-    const t = etat.tableau;
+    const tab = etat.tableau;
     remplacer(
       zone,
       carte(
-        '1. Export d’origine',
-        t
+        t('import.etape1'),
+        tab
           ? [
               h(
                 'dl',
                 { class: 'details' },
-                h('dt', null, 'Fichier'),
+                h('dt', null, t('import.fichier')),
                 h('dd', null, etat.nomFichier!),
-                h('dt', null, 'Contenu'),
-                h('dd', null, `${t.lignes.length} lignes, ${t.colonnes.length} colonnes`),
-                h('dt', null, 'Empreinte SHA-256'),
+                h('dt', null, t('import.contenu')),
+                h('dd', null, t('import.dimensions', { lignes: tab.lignes.length, colonnes: tab.colonnes.length })),
+                h('dt', null, t('import.empreinte')),
                 h('dd', null, empreinte(etat.empreinteFichier!, 16)),
               ),
               encadre(
                 'alerte',
-                h('strong', null, 'Envoyez dès maintenant cette empreinte au validateur'),
-                ' (message, courriel). Elle permettra de prouver plus tard que la liste part bien de cet export, et pas d’une version retouchée.',
+                tr('import.envoyer_empreinte'),
               ),
-              !t.colonnes.includes('donnees_fictives') &&
-                encadre('erreur', h('strong', null, 'Prototype : '), 'cet export ne porte pas la mention de données fictives. N’utilisez jamais de données réelles avec ce prototype.'),
+              !tab.colonnes.includes('donnees_fictives') &&
+                encadre('erreur', tr('import.non_fictif')),
               champ(
-                'Colonne d’identifiant du ménage',
+                t('import.colonne_id'),
                 h(
                   'select',
                   { onchange: (e: Event) => (etat.colonneId = (e.target as HTMLSelectElement).value) },
-                  t.colonnes.map((c) => h('option', { value: c, selected: c === etat.colonneId }, c)),
+                  tab.colonnes.map((c) => h('option', { value: c, selected: c === etat.colonneId }, c)),
                 ),
-                'Valeurs uniques et non vides. Cet identifiant ne pourra pas être corrigé.',
+                t('import.colonne_id_aide'),
               ),
-              bouton('Choisir un autre export', () => {
+              bouton(t('import.autre_export'), () => {
                 etat.tableau = undefined;
                 dessiner();
               }),
             ]
           : depot,
       ),
-      t &&
+      tab &&
         carte(
-          '2. Utilisateurs autorisés',
+          t('import.etape2'),
           h(
             'p',
             null,
-            'Ajoutez la clé publique de chaque personne (fichier ',
-            h('code', null, '2x2_cle_publique_….json'),
-            '). Chacun génère sa clé sur son propre poste : vous ne pouvez pas en fabriquer pour un autre.',
+            tr('import.ajoutez_cles'),
           ),
           tableauUtilisateurs(etat.utilisateurs, true, dessiner),
           h(
@@ -222,36 +220,36 @@ function nouvelleListe() {
           h(
             'div',
             { class: 'ligne' },
-            bouton('Ajouter une clé publique (fichier)…', async () => {
+            bouton(t('import.ajouter_fichier'), async () => {
               const u = await lireClePublique();
               if (u) ajouterUtilisateur(u);
             }),
           ),
           zoneCollage(ajouterUtilisateur),
-          encadre('info', 'Avant de valider, vérifiez chaque empreinte de vive voix avec la personne concernée (téléphone), en dehors de l’outil.'),
+          encadre('info', t('import.verifier_empreintes')),
         ),
-      t &&
+      tab &&
         carte(
-          '3. Mot de passe de la liste',
-          h('p', null, 'Il chiffre le fichier qui circule entre les personnes. Communiquez-le par un autre canal que le fichier lui-même.'),
-          champ('Mot de passe', mdp1, 'Au moins 12 caractères.'),
-          champ('Confirmer', mdp2),
+          t('import.etape3'),
+          h('p', null, t('import.mdp_texte')),
+          champ(t('import.mdp'), mdp1, t('import.mdp_aide')),
+          champ(t('import.confirmer'), mdp2),
           h(
             'div',
             { class: 'ligne' },
-            bouton('Créer la liste chiffrée', creer, 'principal', !rolesOk()),
-            !rolesOk() && h('span', { class: 'discret' }, 'Complétez d’abord les utilisateurs (étape 2).'),
+            bouton(t('import.creer'), creer, 'principal', !rolesOk()),
+            !rolesOk() && h('span', { class: 'discret' }, t('import.completer')),
           ),
         ),
     );
   }
 
   function ajouterUtilisateur(u: Utilisateur) {
-    if (etat.utilisateurs.some((x) => x.empreinte === u.empreinte)) return notifier('Cette clé est déjà dans la liste.', 'erreur');
+    if (etat.utilisateurs.some((x) => x.empreinte === u.empreinte)) return notifier(t('import.cle_deja'), 'erreur');
     // Rôle proposé : la validation tant que personne d'autre ne l'a, sinon la correction.
     u.roles = etat.utilisateurs.some((x) => x.roles.includes('validation')) ? ['correction'] : ['validation'];
     etat.utilisateurs.push(u);
-    notifier(`Clé de ${u.nom} ajoutée. Vérifiez son empreinte avec lui ou elle.`, 'succes');
+    notifier(t('import.cle_ajoutee', { nom: u.nom }), 'succes');
     dessiner();
   }
 
@@ -261,27 +259,27 @@ function nouvelleListe() {
     const validateurs = etat.utilisateurs.filter((u) => u.roles.includes('validation'));
     const deuxPersonnes = correcteurs.some((c) => validateurs.some((v) => v !== c));
     return [
-      { ok: correcteurs.length > 0, texte: 'Au moins une personne en correction' },
-      { ok: validateurs.length > 0, texte: 'Au moins une personne en validation' },
+      { ok: correcteurs.length > 0, texte: t('import.cond_correction') },
+      { ok: validateurs.length > 0, texte: t('import.cond_validation') },
       {
         ok: deuxPersonnes,
         texte:
           etat.utilisateurs.length < 2
-            ? 'Une deuxième personne : ajoutez sa clé publique ci-dessous (fichier ou texte collé)'
-            : 'Deux personnes différentes pour corriger et pour valider',
+            ? t('import.cond_deuxieme')
+            : t('import.cond_deux'),
       },
     ];
   }
   const rolesOk = () => conditionsRoles().every((c) => c.ok);
 
   function creer() {
-    const t = etat.tableau!;
-    if (mdp1.value.length < 12) return notifier('Le mot de passe de la liste doit compter au moins 12 caractères.', 'erreur');
-    if (mdp1.value !== mdp2.value) return notifier('Les deux mots de passe ne correspondent pas.', 'erreur');
-    if (!rolesOk()) return notifier('Les quatre yeux exigent une personne en correction et une autre en validation (étape 2).', 'erreur');
-    occupe('Création et chiffrement de la liste…', async () => {
+    const tab = etat.tableau!;
+    if (mdp1.value.length < 12) return notifier(t('import.mdp_court'), 'erreur');
+    if (mdp1.value !== mdp2.value) return notifier(t('commun.mdp_differents'), 'erreur');
+    if (!rolesOk()) return notifier(t('import.quatre_yeux'), 'erreur');
+    occupe(t('import.creation'), async () => {
       const { liste, etat: e } = await creerListe(
-        { nomFichier: etat.nomFichier!, empreinteFichier: etat.empreinteFichier!, colonnes: t.colonnes, colonneId: etat.colonneId!, lignes: t.lignes },
+        { nomFichier: etat.nomFichier!, empreinteFichier: etat.empreinteFichier!, colonnes: tab.colonnes, colonneId: etat.colonneId!, lignes: tab.lignes },
         id,
         etat.utilisateurs,
       );
@@ -304,8 +302,8 @@ function nouvelleListe() {
 
   dessiner();
   return [
-    h('h1', null, 'Import d’un export'),
-    h('p', { class: 'intro' }, 'L’original est figé : il ne sera jamais modifié. Toute correction passera par le journal signé.'),
+    h('h1', null, t('import.titre')),
+    h('p', { class: 'intro' }, t('import.intro')),
     zone,
   ];
 }
@@ -317,48 +315,48 @@ function listeOuverte() {
   const utilisateurs = [...etat!.utilisateurs.values()];
   const responsable = moi()?.roles.includes('responsable') && session.verification?.valide;
   return [
-    h('h1', null, 'Import'),
+    h('h1', null, t('nav.import')),
     carte(
-      'Export d’origine (figé)',
+      t('import.origine_fige'),
       h(
         'dl',
         { class: 'details' },
-        h('dt', null, 'Fichier'),
+        h('dt', null, t('import.fichier')),
         h('dd', null, o.nomFichier),
-        h('dt', null, 'Contenu'),
-        h('dd', null, `${o.lignes.length} ménages, ${o.colonnes.length} colonnes ; identifiant : `, h('code', null, o.colonneId)),
-        h('dt', null, 'Empreinte SHA-256'),
+        h('dt', null, t('import.contenu')),
+        h('dd', null, tr('import.dimensions_liste', { menages: o.lignes.length, colonnes: o.colonnes.length, id: o.colonneId })),
+        h('dt', null, t('import.empreinte')),
         h('dd', null, empreinte(o.empreinteFichier, 16)),
-        h('dt', null, 'Ouverte par'),
-        h('dd', null, `${etat!.utilisateurs.get(ouverture.auteur)?.nom ?? '?'}, le ${new Date(ouverture.le).toLocaleString('fr-BE')}`),
+        h('dt', null, t('import.ouverte_par')),
+        h('dd', null, t('import.ouverte_le', { nom: etat!.utilisateurs.get(ouverture.auteur)?.nom ?? '?', date: new Date(ouverture.le).toLocaleString(localeCourante()) })),
       ),
-      h('p', { class: 'aide' }, 'Comparez cette empreinte à celle reçue au moment de l’import. Elle doit être identique.'),
+      h('p', { class: 'aide' }, t('import.comparer_empreinte')),
     ),
     carte(
-      'Utilisateurs autorisés',
+      t('import.utilisateurs'),
       tableauUtilisateurs(utilisateurs, false, () => {}),
       responsable &&
         h(
           'div',
           { class: 'ligne' },
-          bouton('Déclarer un nouvel utilisateur (fichier)…', async () => {
+          bouton(t('import.declarer'), async () => {
             const u = await lireClePublique();
             if (u) declarer(u);
           }),
-          badge('signé et journalisé'),
+          badge(t('import.signe_journalise')),
         ),
       responsable && zoneCollage(declarer),
     ),
   ];
 
   function declarer(u: Utilisateur) {
-    if (etat!.utilisateurs.has(u.empreinte)) return notifier('Cette clé est déjà déclarée dans la liste.', 'erreur');
-    const roles = ROLES.filter((r) => r !== 'responsable' && confirm(`Donner le rôle « ${LIBELLES_ROLES[r]} » à ${u.nom} ?`));
-    if (!roles.length) return notifier('Aucun rôle choisi : utilisateur non déclaré.', 'info');
+    if (etat!.utilisateurs.has(u.empreinte)) return notifier(t('import.deja_declaree'), 'erreur');
+    const roles = ROLES.filter((r) => r !== 'responsable' && confirm(t('import.donner_role', { role: LIBELLES_ROLES[r], nom: u.nom })));
+    if (!roles.length) return notifier(t('import.aucun_role'), 'info');
     u.roles = roles;
-    occupe('Signature…', async () => {
+    occupe(t('commun.signature'), async () => {
       await declarerUtilisateur(liste!, etat!, session.identite!, u);
-      notifier(`${u.nom} est déclaré(e). Vérifiez son empreinte avec lui ou elle.`, 'succes');
+      notifier(t('import.declare', { nom: u.nom }), 'succes');
       await apresModification();
     });
   }

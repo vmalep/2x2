@@ -8,6 +8,7 @@ import { utf8, type Octets } from '../crypto/encodage.ts';
 import { attribut, decoderEntites, echapperXml } from './xml.ts';
 import { ecrireZip, lireZip } from './zip.ts';
 import { normaliser, type Tableau } from './tableau.ts';
+import { t } from '../i18n/index.ts';
 
 function texte(octets: Octets | undefined): string {
   return octets ? new TextDecoder().decode(octets) : '';
@@ -59,7 +60,7 @@ function serieVersIso(serie: number): string {
 export async function lireXlsx(octets: Octets): Promise<Tableau> {
   const fichiers = await lireZip(octets);
   const classeur = texte(fichiers.get('xl/workbook.xml'));
-  if (!classeur) throw new Error('Fichier XLSX invalide (classeur introuvable).');
+  if (!classeur) throw new Error(t('err.xlsx'));
   const premiereFeuille = /<sheet\b[^>]*>/.exec(classeur)?.[0];
   const idRelation = premiereFeuille && (attribut(premiereFeuille, 'r:id') ?? attribut(premiereFeuille, 'id'));
   let chemin = 'xl/worksheets/sheet1.xml';
@@ -71,7 +72,7 @@ export async function lireXlsx(octets: Octets): Promise<Tableau> {
     }
   }
   const feuille = texte(fichiers.get(chemin));
-  if (!feuille) throw new Error('Feuille de calcul introuvable dans le fichier XLSX.');
+  if (!feuille) throw new Error(t('err.xlsx_feuille'));
 
   const partages = [...texte(fichiers.get('xl/sharedStrings.xml')).matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => texteRiche(m[1]));
   const dates = stylesDate(texte(fichiers.get('xl/styles.xml')));
