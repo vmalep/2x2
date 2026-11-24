@@ -1,4 +1,4 @@
-import { LIBELLES_CONTROLES, type Controle } from '../../controles/controles.ts';
+import { LIBELLES_NATURE } from '../../model/export.ts';
 import { CHAMP_STATUT, DECISIONS_ALERTE, type Entree } from '../../model/types.ts';
 import { encadre } from '../composants.ts';
 import { carteConfronterRecu } from './recus.ts';
@@ -19,12 +19,17 @@ function resume(e: Entree): string {
       return `Correction n° ${e.contenu.correction} ${e.contenu.decision === 'acceptee' ? 'acceptée' : 'refusée'}${e.contenu.commentaire ? ` : « ${e.contenu.commentaire} »` : ''}`;
     case 'parametres':
       return `Paramètres des contrôles : seuil de durée ${e.contenu.parametres.seuilDureeMinutes} min, durée max. ${e.contenu.parametres.dureeMaxHeures} h`;
+    case 'regles': {
+      const actives = e.contenu.regles.filter((r) => r.actif).length;
+      return `Règles de contrôle : ${actives} active(s) sur ${e.contenu.regles.length}${e.contenu.source ? `, fichier ${e.contenu.source.nomFichier}` : ''}`;
+    }
     case 'decision_alerte': {
-      const controle = e.contenu.alerte.split(':')[0] as Controle;
-      return `${LIBELLES_CONTROLES[controle] ?? controle} (${e.contenu.menages.join(', ')}) : ${DECISIONS_ALERTE[e.contenu.categorie]?.[e.contenu.decision] ?? e.contenu.decision}${e.contenu.commentaire ? ` · « ${e.contenu.commentaire} »` : ''}`;
+      const controle = e.contenu.alerte.split(':')[0];
+      const regle = session.etat?.reglesCourantes().find((r) => r.nom === controle);
+      return `${regle?.libelle ?? controle} (${e.contenu.menages.join(', ')}) : ${DECISIONS_ALERTE[e.contenu.categorie]?.[e.contenu.decision] ?? e.contenu.decision}${e.contenu.commentaire ? ` · « ${e.contenu.commentaire} »` : ''}`;
     }
     case 'export':
-      return `Export ${e.contenu.nature === 'liste' ? 'de la liste finale' : 'du rapport des alertes'} (${e.contenu.format.toUpperCase()}) : ${e.contenu.nomFichier}`;
+      return `Export : ${LIBELLES_NATURE[e.contenu.nature].toLowerCase()} (${e.contenu.format.toUpperCase()}, ${e.contenu.menages} ligne(s)) : ${e.contenu.nomFichier}${e.contenu.colonnes?.length ? ` · données sorties : ${e.contenu.colonnes.join(', ')}` : ''}`;
   }
 }
 
@@ -34,6 +39,7 @@ const TYPES: Record<Entree['type'], string> = {
   correction: 'Correction',
   decision: 'Validation',
   parametres: 'Paramètres',
+  regles: 'Règles',
   decision_alerte: 'Alerte',
   export: 'Export',
 };

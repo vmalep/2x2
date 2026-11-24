@@ -69,6 +69,75 @@ export async function lireZip(archive: Uint8Array<ArrayBuffer>): Promise<Map<str
   return resultat;
 }
 
+/**
+ * Index d'une archive ZIP, sans tout décompresser : chaque fichier est lu à la demande.
+ * Prend en charge ZIP64 (archives de plus de 65 535 fichiers ou de plus de 4 Go), courant
+ * pour les paquets de tuiles de carte.
+ */
+export function indexerZip(archive: Uint8Array<ArrayBuffer>): Map<string, () => Promise<Octets>> {
+  const vue = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
+  const u64 = (i: number) => Number(vue.getBigUint64(i, true));
+  let fin = -1;
+  for (let i = archive.length - 22; i >= Math.max(0, archive.length - 22 - 0xffff); i--) {
+    if (vue.getUint32(i, true) === 0x06054b50) {
+      fin = i;
+      break;
+    }
+  }
+  if (fin < 0) throw new Error('Archive ZIP invalide.');
+  let nombre = vue.getUint16(fin + 10, true);
+  let position = vue.getUint32(fin + 16, true);
+  if ((nombre === 0xffff || position === 0xffffffff) && fin >= 20 && vue.getUint32(fin - 20, true) === 0x07064b50) {
+    const fin64 = u64(fin - 20 + 8);
+    if (vue.getUint32(fin64, true) !== 0x06064b50) throw new Error('Archive ZIP64 invalide.');
+    nombre = u64(fin64 + 32);
+    position = u64(fin64 + 48);
+  }
+  const decodeur = new TextDecoder();
+  const index = new Map<string, () => Promise<Octets>>();
+  for (let n = 0; n < nombre; n++) {
+    if (vue.getUint32(position, true) !== 0x02014b50) throw new Error('Répertoire central ZIP corrompu.');
+    const methode = vue.getUint16(position + 10, true);
+    let tailleCompressee = vue.getUint32(position + 20, true);
+    const tailleBrute = vue.getUint32(position + 24, true);
+    const longueurNom = vue.getUint16(position + 28, true);
+    const longueurExtra = vue.getUint16(position + 30, true);
+    const longueurCommentaire = vue.getUint16(position + 32, true);
+    let decalageLocal = vue.getUint32(position + 42, true);
+    const nom = decodeur.decode(archive.subarray(position + 46, position + 46 + longueurNom));
+    // Champ supplémentaire ZIP64 : tailles et position sur 8 octets, dans l'ordre, si elles débordent.
+    let e = position + 46 + longueurNom;
+    const finExtra = e + longueurExtra;
+    while (e + 4 <= finExtra) {
+      const id = vue.getUint16(e, true);
+      const taille = vue.getUint16(e + 2, true);
+      if (id === 0x0001) {
+        let k = e + 4;
+        if (tailleBrute === 0xffffffff) k += 8;
+        if (tailleCompressee === 0xffffffff) {
+          tailleCompressee = u64(k);
+          k += 8;
+        }
+        if (decalageLocal === 0xffffffff) decalageLocal = u64(k);
+      }
+      e += 4 + taille;
+    }
+    position = finExtra + longueurCommentaire;
+    if (nom.endsWith('/')) continue;
+    const local = decalageLocal;
+    const taille = tailleCompressee;
+    index.set(nom, async () => {
+      if (vue.getUint32(local, true) !== 0x04034b50) throw new Error('En-tête local ZIP corrompu.');
+      const debut = local + 30 + vue.getUint16(local + 26, true) + vue.getUint16(local + 28, true);
+      const brut = archive.slice(debut, debut + taille);
+      if (methode === 0) return brut;
+      if (methode === 8) return transformer(brut, new DecompressionStream('deflate-raw'));
+      throw new Error(`Méthode de compression ZIP non prise en charge (${methode}).`);
+    });
+  }
+  return index;
+}
+
 export async function ecrireZip(entrees: EntreeZip[]): Promise<Octets> {
   const encodeur = new TextEncoder();
   const morceaux: Uint8Array[] = [];

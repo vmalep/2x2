@@ -52,8 +52,8 @@ export function lireCsv(texte: string, separateur?: string): Tableau {
   return normaliser(lignes);
 }
 
-export function ecrireCsv(tableau: Tableau, separateur = ';'): string {
+export function ecrireCsv(tableau: Tableau, separateur = ';', bom = true): string {
   const echapper = (v: string) => (/[";\r\n,\t]/.test(v) || v !== v.trim() ? `"${v.replace(/"/g, '""')}"` : v);
-  // BOM pour qu'Excel et LibreOffice reconnaissent l'UTF-8 à l'ouverture.
-  return '﻿' + [tableau.colonnes, ...tableau.lignes].map((l) => l.map(echapper).join(separateur)).join('\r\n') + '\r\n';
+  // BOM pour qu'Excel et LibreOffice reconnaissent l'UTF-8 à l'ouverture (pas pour Kobo, qui lirait mal la 1re colonne).
+  return (bom ? '\ufeff' : '') + [tableau.colonnes, ...tableau.lignes].map((l) => l.map(echapper).join(separateur)).join('\r\n') + '\r\n';
 }

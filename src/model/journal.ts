@@ -8,6 +8,7 @@
 import { signer, verifier, type IdentiteDeverrouillee } from '../crypto/cles.ts';
 import { jsonCanonique } from '../crypto/encodage.ts';
 import { sha256Hex } from '../crypto/empreinte.ts';
+import { reglesDepuisParametres, reglesParDefaut, validerRegles, type Regle } from '../controles/regles.ts';
 import {
   CHAMP_STATUT,
   DECISIONS_ALERTE,
@@ -15,6 +16,7 @@ import {
   STATUTS,
   type ContenuDecisionAlerte,
   type ContenuExport,
+  type ContenuRegles,
   type Parametres,
   type ContenuCorrection,
   type ContenuDecision,
@@ -44,8 +46,10 @@ export class Etat {
   /** Correction en attente par cellule « ménage␟champ ». */
   enAttenteParCellule = new Map<string, number>();
   indexMenages = new Map<string, number>();
-  /** Paramètres des contrôles fixés par un responsable (sinon, détection automatique). */
+  /** Paramètres des contrôles (ancien format), convertis en règles. */
   parametres: Parametres | undefined;
+  /** Dernier jeu de règles signé au journal, avec sa ligne. */
+  regles: (Entree & { type: 'regles' }) | undefined;
   /** Dernière décision humaine par alerte. */
   decisionsAlertes = new Map<string, Entree & { type: 'decision_alerte' }>();
   exports: (Entree & { type: 'export' })[] = [];
@@ -68,6 +72,15 @@ export class Etat {
   aRole(empreinte: string, role: Role): boolean {
     return this.utilisateurs.get(empreinte)?.roles.includes(role) ?? false;
   }
+
+  /** Règles en vigueur : dernier jeu signé, sinon anciens paramètres convertis, sinon règles par défaut. */
+  reglesCourantes(): Regle[] {
+    if (this.regles) return this.regles.contenu.regles;
+    if (this.parametres) return reglesDepuisParametres(this.parametres);
+    // L'original ne change jamais : les règles par défaut se calculent une seule fois.
+    return (this.reglesDefautCache ??= reglesParDefaut(this.original.colonnes, this.original.lignes));
+  }
+  private reglesDefautCache?: Regle[];
 
   estExclu(menage: string): boolean {
     return this.valeur(menage, CHAMP_STATUT) === 'exclu';
@@ -156,6 +169,15 @@ function appliquer(etat: Etat, e: EntreeNonSignee): string | undefined {
       const nombres = [p.seuilDureeMinutes, p.dureeMaxHeures, p.partCourtsEnqueteur, p.minEntretiensEnqueteur, p.distanceNoms];
       if (nombres.some((n) => typeof n !== 'number' || !Number.isFinite(n) || n < 0)) return 'Paramètre numérique invalide.';
       etat.parametres = p;
+      etat.regles = undefined;
+      return undefined;
+    }
+    case 'regles': {
+      if (!auteur?.roles.includes('responsable')) return 'Seul un responsable peut modifier les règles de contrôle.';
+      if (!Array.isArray(e.contenu.regles)) return 'Jeu de règles illisible.';
+      const erreurs = validerRegles(e.contenu.regles, etat.original.colonnes);
+      if (erreurs.length) return `Règles invalides : ${erreurs[0]}`;
+      etat.regles = e as Entree & { type: 'regles' };
       return undefined;
     }
     case 'decision_alerte': {
@@ -170,7 +192,7 @@ function appliquer(etat: Etat, e: EntreeNonSignee): string | undefined {
       if (d.decision === 'confirmee' && !d.commentaire.trim()) {
         return 'Une anomalie confirmée doit être motivée par un commentaire.';
       }
-      if (d.decision === 'faux_positif' && !d.commentaire.trim()) return 'Un faux positif doit être motivé par un commentaire.';
+      if (d.decision === 'faux_positif' && !d.commentaire.trim()) return 'Une alerte jugée sans problème doit être motivée par un commentaire.';
       etat.decisionsAlertes.set(d.alerte, e as Entree & { type: 'decision_alerte' });
       return undefined;
     }
@@ -291,6 +313,7 @@ function appliquerSurCopie(etat: Etat, e: EntreeNonSignee): string | undefined {
   copie.modifications = new Map([...etat.modifications].map(([k, v]) => [k, new Map(v)]));
   copie.enAttenteParCellule = new Map(etat.enAttenteParCellule);
   copie.parametres = etat.parametres;
+  copie.regles = etat.regles;
   copie.decisionsAlertes = new Map(etat.decisionsAlertes);
   copie.exports = [...etat.exports];
   return appliquer(copie, e);
@@ -333,6 +356,10 @@ export function corriger(liste: Liste, etat: Etat, identite: IdentiteDeverrouill
 
 export function decider(liste: Liste, etat: Etat, identite: IdentiteDeverrouillee, contenu: ContenuDecision) {
   return ajouterEntree(liste, etat, identite, { type: 'decision', contenu });
+}
+
+export function signerRegles(liste: Liste, etat: Etat, identite: IdentiteDeverrouillee, contenu: ContenuRegles) {
+  return ajouterEntree(liste, etat, identite, { type: 'regles', contenu });
 }
 
 export function fixerParametres(liste: Liste, etat: Etat, identite: IdentiteDeverrouillee, parametres: Parametres) {

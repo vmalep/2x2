@@ -3,9 +3,10 @@
  * Toutes les cellules sont du texte, comme pour l'écriture XLSX.
  */
 import { utf8, type Octets } from '../crypto/encodage.ts';
+import { normaliser, type Tableau } from './tableau.ts';
 import type { FeuilleXlsx } from './xlsx.ts';
-import { echapperXml } from './xml.ts';
-import { ecrireZip } from './zip.ts';
+import { attribut, decoderEntites, echapperXml } from './xml.ts';
+import { ecrireZip, lireZip } from './zip.ts';
 
 const NS =
   'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" ' +
@@ -62,4 +63,49 @@ export async function ecrireOds(feuilles: FeuilleXlsx[]): Promise<Octets> {
     { nom: 'META-INF/manifest.xml', donnees: utf8(manifeste) },
     { nom: 'content.xml', donnees: utf8(contenu) },
   ]);
+}
+
+/** Texte d'une cellule ODS : paragraphes séparés par des retours à la ligne, espaces codés restitués. */
+function texteCellule(xml: string): string {
+  return [...xml.matchAll(/<text:p\b[^>]*?(?:\/>|>([\s\S]*?)<\/text:p>)/g)]
+    .map((m) =>
+      decoderEntites(
+        (m[1] ?? '')
+          .replace(/<text:s\b[^>]*?text:c="(\d+)"[^>]*\/>/g, (_x, n: string) => ' '.repeat(Number(n)))
+          .replace(/<text:s\b[^>]*\/>/g, ' ')
+          .replace(/<text:tab\b[^>]*\/>/g, '\t')
+          .replace(/<text:line-break\b[^>]*\/>/g, '\n')
+          .replace(/<[^>]+>/g, ''),
+      ),
+    )
+    .join('\n');
+}
+
+/**
+ * Lecture ODS minimale : première feuille, valeurs affichées (texte) ; les cellules et lignes répétées
+ * (table:number-columns-repeated / rows-repeated) sont dépliées, dans une limite raisonnable.
+ */
+export async function lireOds(octets: Octets): Promise<Tableau> {
+  const fichiers = await lireZip(octets);
+  const mime = fichiers.get('mimetype');
+  if (!mime || new TextDecoder().decode(mime).trim() !== 'application/vnd.oasis.opendocument.spreadsheet') {
+    throw new Error('Fichier ODS invalide (classeur OpenDocument attendu).');
+  }
+  const contenu = new TextDecoder().decode(fichiers.get('content.xml') ?? new Uint8Array());
+  const table = /<table:table\b[^>]*>([\s\S]*?)<\/table:table>/.exec(contenu)?.[1];
+  if (table === undefined) throw new Error('Aucune feuille trouvée dans le fichier ODS.');
+  const lignes: string[][] = [];
+  for (const mLigne of table.matchAll(/<table:table-row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/table:table-row>)/g)) {
+    const ligne: string[] = [];
+    for (const mCell of (mLigne[2] ?? '').matchAll(/<table:(?:covered-)?table-cell\b([^>]*?)(?:\/>|>([\s\S]*?)<\/table:(?:covered-)?table-cell>)/g)) {
+      const repetitions = Math.min(Number(attribut(`<c ${mCell[1]}>`, 'table:number-columns-repeated') ?? 1), 1000);
+      const valeur = texteCellule(mCell[2] ?? '');
+      for (let k = 0; k < repetitions; k++) ligne.push(valeur);
+    }
+    while (ligne.length && ligne[ligne.length - 1] === '') ligne.pop();
+    const repetitions = Math.min(Number(attribut(`<r ${mLigne[1]}>`, 'table:number-rows-repeated') ?? 1), 1000);
+    // Les lignes vides répétées (souvent par milliers en fin de feuille) ne servent à rien.
+    for (let k = 0; k < (ligne.length ? repetitions : 1); k++) lignes.push([...ligne]);
+  }
+  return normaliser(lignes);
 }

@@ -1,16 +1,4 @@
-import type { ColonnesControles, Parametres } from '../model/types.ts';
-
-export const LIBELLES_COLONNES: Record<keyof ColonnesControles, string> = {
-  debut: 'Début de l’entretien',
-  fin: 'Fin de l’entretien',
-  soumission: 'Heure de soumission',
-  enqueteur: 'Enquêteur',
-  telephone: 'Téléphone',
-  nom: 'Nom du chef de ménage',
-  village: 'Village',
-  enfantNonAccompagne: 'Enfant non accompagné',
-  ageChef: 'Âge du chef de ménage',
-};
+import type { ColonnesControles } from '../model/types.ts';
 
 const MOTIFS_COLONNES: Record<keyof ColonnesControles, RegExp[]> = {
   debut: [/^start$/, /^debut/],
@@ -20,8 +8,7 @@ const MOTIFS_COLONNES: Record<keyof ColonnesControles, RegExp[]> = {
   telephone: [/tel(ephone)?$|phone/, /tel/],
   nom: [/nom.*chef|chef.*nom|head.*name|name.*head/, /^nom/, /name/],
   village: [/village/, /localite|locality/],
-  enfantNonAccompagne: [/non_?accompagn|unaccompanied|^ena$/],
-  ageChef: [/(^|_)age_(du_)?chef|chef(_menage)?_age$|head.*_age$/, /^age(_|$)/],
+  identifiant: [/piece|carte_?(d_?)?(identite|electeur)|cni|national_?id|id_?number|numero_?id/],
 };
 
 /** Propose la correspondance des colonnes d'après leur nom (dernier segment des groupes Kobo). */
@@ -39,15 +26,4 @@ export function detecterColonnes(colonnes: string[]): ColonnesControles {
     }
   }
   return resultat;
-}
-
-export function parametresParDefaut(colonnes: string[]): Parametres {
-  return {
-    colonnes: detecterColonnes(colonnes),
-    seuilDureeMinutes: 6,
-    dureeMaxHeures: 3,
-    partCourtsEnqueteur: 0.2,
-    minEntretiensEnqueteur: 5,
-    distanceNoms: 2,
-  };
 }

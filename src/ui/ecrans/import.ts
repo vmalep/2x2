@@ -77,16 +77,38 @@ function tableauUtilisateurs(utilisateurs: Utilisateur[], modifiable: boolean, s
   );
 }
 
-async function lireClePublique(): Promise<Utilisateur | undefined> {
-  const f = await choisirFichier('.json,application/json');
-  if (!f) return undefined;
+async function utilisateurDepuisTexte(texte: string): Promise<Utilisateur | undefined> {
   try {
-    const cle = await lireFichierClePublique(f.texte());
+    const cle = await lireFichierClePublique(texte);
     return { nom: cle.nom, cle: cle.cle, empreinte: cle.empreinte, roles: [] };
   } catch (e) {
     notifier((e as Error).message, 'erreur');
     return undefined;
   }
+}
+
+async function lireClePublique(): Promise<Utilisateur | undefined> {
+  const f = await choisirFichier('.json,.txt,application/json,text/plain');
+  return f ? utilisateurDepuisTexte(f.texte()) : undefined;
+}
+
+/** Zone pour coller une clé publique reçue par message (code « 2X2-CLE-1. »). */
+function zoneCollage(surAjout: (u: Utilisateur) => void) {
+  const texte = h('textarea', { rows: 3, placeholder: 'Collez ici la clé publique reçue par message', 'aria-label': 'Clé publique collée' });
+  return h(
+    'details',
+    { class: 'collage' },
+    h('summary', null, 'Coller une clé publique reçue par message'),
+    texte,
+    h(
+      'div',
+      { class: 'ligne' },
+      bouton('Ajouter cette clé', async () => {
+        const u = await utilisateurDepuisTexte(texte.value);
+        if (u) surAjout(u);
+      }),
+    ),
+  );
 }
 
 function nouvelleListe() {
@@ -97,7 +119,7 @@ function nouvelleListe() {
     empreinteFichier?: string;
     colonneId?: string;
     utilisateurs: Utilisateur[];
-  } = { utilisateurs: [{ nom: id.nom, cle: id.clePublique, empreinte: id.empreinte, roles: ['responsable'] }] };
+  } = { utilisateurs: [{ nom: id.nom, cle: id.clePublique, empreinte: id.empreinte, roles: ['responsable', 'correction'] }] };
   const zone = h('div');
   const mdp1 = motDePasse('', 'new-password');
   const mdp2 = motDePasse('', 'new-password');
@@ -191,17 +213,21 @@ function nouvelleListe() {
           ),
           tableauUtilisateurs(etat.utilisateurs, true, dessiner),
           h(
+            'ul',
+            { class: 'conditions' },
+            conditionsRoles().map((c) =>
+              h('li', { class: c.ok ? 'ok' : 'ko' }, h('span', { class: 'marque', 'aria-hidden': 'true' }, c.ok ? '✓' : '✗'), c.texte),
+            ),
+          ),
+          h(
             'div',
             { class: 'ligne' },
-            bouton('Ajouter une clé publique…', async () => {
+            bouton('Ajouter une clé publique (fichier)…', async () => {
               const u = await lireClePublique();
-              if (!u) return;
-              if (etat.utilisateurs.some((x) => x.empreinte === u.empreinte)) return notifier('Cette clé est déjà dans la liste.', 'erreur');
-              u.roles = ['correction'];
-              etat.utilisateurs.push(u);
-              dessiner();
+              if (u) ajouterUtilisateur(u);
             }),
           ),
+          zoneCollage(ajouterUtilisateur),
           encadre('info', 'Avant de valider, vérifiez chaque empreinte de vive voix avec la personne concernée (téléphone), en dehors de l’outil.'),
         ),
       t &&
@@ -210,21 +236,49 @@ function nouvelleListe() {
           h('p', null, 'Il chiffre le fichier qui circule entre les personnes. Communiquez-le par un autre canal que le fichier lui-même.'),
           champ('Mot de passe', mdp1, 'Au moins 12 caractères.'),
           champ('Confirmer', mdp2),
-          bouton('Créer la liste chiffrée', creer, 'principal'),
+          h(
+            'div',
+            { class: 'ligne' },
+            bouton('Créer la liste chiffrée', creer, 'principal', !rolesOk()),
+            !rolesOk() && h('span', { class: 'discret' }, 'Complétez d’abord les utilisateurs (étape 2).'),
+          ),
         ),
     );
   }
+
+  function ajouterUtilisateur(u: Utilisateur) {
+    if (etat.utilisateurs.some((x) => x.empreinte === u.empreinte)) return notifier('Cette clé est déjà dans la liste.', 'erreur');
+    // Rôle proposé : la validation tant que personne d'autre ne l'a, sinon la correction.
+    u.roles = etat.utilisateurs.some((x) => x.roles.includes('validation')) ? ['correction'] : ['validation'];
+    etat.utilisateurs.push(u);
+    notifier(`Clé de ${u.nom} ajoutée. Vérifiez son empreinte avec lui ou elle.`, 'succes');
+    dessiner();
+  }
+
+  /** Conditions du principe des quatre yeux, affichées en direct à l'étape 2. */
+  function conditionsRoles() {
+    const correcteurs = etat.utilisateurs.filter((u) => u.roles.includes('correction'));
+    const validateurs = etat.utilisateurs.filter((u) => u.roles.includes('validation'));
+    const deuxPersonnes = correcteurs.some((c) => validateurs.some((v) => v !== c));
+    return [
+      { ok: correcteurs.length > 0, texte: 'Au moins une personne en correction' },
+      { ok: validateurs.length > 0, texte: 'Au moins une personne en validation' },
+      {
+        ok: deuxPersonnes,
+        texte:
+          etat.utilisateurs.length < 2
+            ? 'Une deuxième personne : ajoutez sa clé publique ci-dessous (fichier ou texte collé)'
+            : 'Deux personnes différentes pour corriger et pour valider',
+      },
+    ];
+  }
+  const rolesOk = () => conditionsRoles().every((c) => c.ok);
 
   function creer() {
     const t = etat.tableau!;
     if (mdp1.value.length < 12) return notifier('Le mot de passe de la liste doit compter au moins 12 caractères.', 'erreur');
     if (mdp1.value !== mdp2.value) return notifier('Les deux mots de passe ne correspondent pas.', 'erreur');
-    const correcteurs = etat.utilisateurs.filter((u) => u.roles.includes('correction'));
-    const validateurs = etat.utilisateurs.filter((u) => u.roles.includes('validation'));
-    if (!correcteurs.length || !validateurs.length) return notifier('Il faut au moins une personne en correction et une en validation.', 'erreur');
-    if (correcteurs.length === 1 && validateurs.length === 1 && correcteurs[0] === validateurs[0]) {
-      return notifier('Les quatre yeux exigent deux personnes : la correction et la validation ne peuvent pas reposer sur la même seule personne.', 'erreur');
-    }
+    if (!rolesOk()) return notifier('Les quatre yeux exigent une personne en correction et une autre en validation (étape 2).', 'erreur');
     occupe('Création et chiffrement de la liste…', async () => {
       const { liste, etat: e } = await creerListe(
         { nomFichier: etat.nomFichier!, empreinteFichier: etat.empreinteFichier!, colonnes: t.colonnes, colonneId: etat.colonneId!, lignes: t.lignes },
@@ -287,22 +341,27 @@ function listeOuverte() {
         h(
           'div',
           { class: 'ligne' },
-          bouton('Déclarer un nouvel utilisateur…', async () => {
+          bouton('Déclarer un nouvel utilisateur (fichier)…', async () => {
             const u = await lireClePublique();
-            if (!u) return;
-            const roles = ROLES.filter((r) => r !== 'responsable' && confirm(`Donner le rôle « ${LIBELLES_ROLES[r]} » à ${u.nom} ?`));
-            if (!roles.length) return notifier('Aucun rôle choisi : utilisateur non déclaré.', 'info');
-            u.roles = roles;
-            occupe('Signature…', async () => {
-              await declarerUtilisateur(liste!, etat!, session.identite!, u);
-              notifier(`${u.nom} est déclaré(e). Vérifiez son empreinte avec lui ou elle.`, 'succes');
-              await apresModification();
-            });
+            if (u) declarer(u);
           }),
           badge('signé et journalisé'),
         ),
+      responsable && zoneCollage(declarer),
     ),
   ];
+
+  function declarer(u: Utilisateur) {
+    if (etat!.utilisateurs.has(u.empreinte)) return notifier('Cette clé est déjà déclarée dans la liste.', 'erreur');
+    const roles = ROLES.filter((r) => r !== 'responsable' && confirm(`Donner le rôle « ${LIBELLES_ROLES[r]} » à ${u.nom} ?`));
+    if (!roles.length) return notifier('Aucun rôle choisi : utilisateur non déclaré.', 'info');
+    u.roles = roles;
+    occupe('Signature…', async () => {
+      await declarerUtilisateur(liste!, etat!, session.identite!, u);
+      notifier(`${u.nom} est déclaré(e). Vérifiez son empreinte avec lui ou elle.`, 'succes');
+      await apresModification();
+    });
+  }
 }
 
 export function ecranImport() {

@@ -4,8 +4,8 @@
  * Seule la clé publique (et son empreinte) est communiquée au responsable.
  */
 import { chiffrerJson, dechiffrerJson, type EnveloppeChiffree } from './chiffrement.ts';
-import { depuisBase64, jsonCanonique, utf8, versBase64 } from './encodage.ts';
-import { sha256Hex } from './empreinte.ts';
+import { depuisBase64, depuisUtf8, jsonCanonique, utf8, versBase64 } from './encodage.ts';
+import { grouper, sha256Hex } from './empreinte.ts';
 
 export const FORMAT_CLE = '2x2-cle-personnelle';
 export const FORMAT_CLE_PUBLIQUE = '2x2-cle-publique';
@@ -31,6 +31,7 @@ export interface FichierClePublique {
 
 export interface IdentiteDeverrouillee {
   nom: string;
+  creeLe: string;
   clePublique: ClePubliqueJwk;
   empreinte: string;
   clePrivee: CryptoKey;
@@ -74,26 +75,54 @@ export async function genererIdentite(
   };
   // La clé privée utilisée pendant la séance est réimportée comme non exportable.
   const clePrivee = await crypto.subtle.importKey('jwk', clePriveeJwk, ALGO, false, ['sign']);
-  return { fichierCle, fichierPublic, identite: { nom: nomPropre, clePublique, empreinte, clePrivee } };
+  return { fichierCle, fichierPublic, identite: { nom: nomPropre, creeLe, clePublique, empreinte, clePrivee } };
 }
 
 export async function deverrouillerIdentite(fichierCle: EnveloppeChiffree, motDePasse: string): Promise<IdentiteDeverrouillee> {
   const { clePrivee: jwk } = await dechiffrerJson<{ clePrivee: JsonWebKey }>(fichierCle, motDePasse, FORMAT_CLE);
-  const pub = fichierCle.public as { nom: string; clePublique: ClePubliqueJwk; empreinte: string };
+  const pub = fichierCle.public as { nom: string; clePublique: ClePubliqueJwk; empreinte: string; creeLe?: string };
   const clePublique = reduire(pub.clePublique as JsonWebKey);
   // Vérifie que la clé privée correspond bien à la clé publique annoncée.
   if (jwk.x !== clePublique.x || jwk.y !== clePublique.y) throw new Error('Fichier de clé incohérent.');
   const empreinte = await empreinteCle(clePublique);
   const clePrivee = await crypto.subtle.importKey('jwk', jwk, ALGO, false, ['sign']);
-  return { nom: pub.nom, clePublique, empreinte, clePrivee };
+  return { nom: pub.nom, creeLe: pub.creeLe ?? '', clePublique, empreinte, clePrivee };
 }
 
+/** Fichier de clé publique, reconstruit depuis l'identité déverrouillée : on peut le transmettre à tout moment. */
+export function fichierClePublique(identite: IdentiteDeverrouillee): FichierClePublique {
+  return {
+    format: FORMAT_CLE_PUBLIQUE,
+    version: 1,
+    nom: identite.nom,
+    cle: identite.clePublique,
+    empreinte: identite.empreinte,
+    creeLe: identite.creeLe,
+  };
+}
+
+const PREFIXE_CLE = '2X2-CLE-1.';
+
+/** Clé publique sous forme de texte, à coller dans un message. La ligne « Code » fait foi. */
+export function clePubliqueEnTexte(f: FichierClePublique): string {
+  return [
+    `Clé publique 2x2 de ${f.nom}`,
+    `Empreinte : ${grouper(f.empreinte, 8)}`,
+    `Code : ${PREFIXE_CLE}${versBase64(utf8(JSON.stringify(f)))}`,
+  ].join('\n');
+}
+
+/** Lit une clé publique : fichier JSON, ou texte contenant le code « 2X2-CLE-1. » (même coupé sur plusieurs lignes). */
 export async function lireFichierClePublique(texte: string): Promise<FichierClePublique> {
   let donnees: FichierClePublique;
   try {
-    donnees = JSON.parse(texte);
+    const debut = texte.indexOf(PREFIXE_CLE);
+    if (debut >= 0) {
+      const code = /^[A-Za-z0-9+/=]+/.exec(texte.slice(debut + PREFIXE_CLE.length).replace(/\s+/g, ''))?.[0] ?? '';
+      donnees = JSON.parse(depuisUtf8(depuisBase64(code)));
+    } else donnees = JSON.parse(texte);
   } catch {
-    throw new Error('Fichier de clé publique illisible.');
+    throw new Error('Clé publique illisible (fichier ou texte incomplet ?).');
   }
   if (donnees?.format !== FORMAT_CLE_PUBLIQUE) throw new Error("Ce fichier n'est pas une clé publique 2x2.");
   const cle = reduire(donnees.cle as JsonWebKey);

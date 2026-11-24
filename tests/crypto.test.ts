@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { chiffrerJson, dechiffrerJson, MotDePasseIncorrect } from '../src/crypto/chiffrement.ts';
-import { deverrouillerIdentite, genererIdentite, lireFichierClePublique, signer, verifier } from '../src/crypto/cles.ts';
+import {
+  clePubliqueEnTexte,
+  deverrouillerIdentite,
+  fichierClePublique,
+  genererIdentite,
+  lireFichierClePublique,
+  signer,
+  verifier,
+} from '../src/crypto/cles.ts';
 import { jsonCanonique } from '../src/crypto/encodage.ts';
 import { sha256Hex } from '../src/crypto/empreinte.ts';
 import { ITER } from './aides.ts';
@@ -71,5 +79,15 @@ describe('Clés personnelles et signatures', () => {
     expect((await lireFichierClePublique(JSON.stringify(fichierPublic))).nom).toBe('A');
     const faux = { ...fichierPublic, empreinte: '0'.repeat(64) };
     await expect(lireFichierClePublique(JSON.stringify(faux))).rejects.toThrow(/incohérente/);
+  });
+  it('transmet la clé publique en texte, même recoupé par une messagerie', async () => {
+    const { fichierCle, fichierPublic } = await genererIdentite('Simon', 'x', ITER);
+    const reconstruit = fichierClePublique(await deverrouillerIdentite(fichierCle, 'x'));
+    expect(reconstruit).toEqual(fichierPublic);
+    const texte = clePubliqueEnTexte(reconstruit);
+    expect(texte).not.toContain('"d"');
+    const coupe = texte.replace(/(2X2-CLE-1\.)(.{30})(.{30})/, '$1$2\n  $3');
+    expect((await lireFichierClePublique(coupe)).empreinte).toBe(fichierPublic.empreinte);
+    await expect(lireFichierClePublique(texte.slice(0, -20))).rejects.toThrow(/illisible/);
   });
 });

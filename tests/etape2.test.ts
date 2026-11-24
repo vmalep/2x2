@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { calculerAlertes } from '../src/controles/controles.ts';
-import { parametresParDefaut } from '../src/controles/parametres.ts';
+import { reglesParDefaut } from '../src/controles/regles.ts';
 import { sha256Hex } from '../src/crypto/empreinte.ts';
 import { genererDonneesFictives } from '../src/gen/fictif.ts';
 import { lireXlsx } from '../src/io/xlsx.ts';
 import { lireZip } from '../src/io/zip.ts';
 import { ecrireOds } from '../src/io/ods.ts';
 import { blocages, exporter, tableauListeFinale, verifierFichierExporte } from '../src/model/export.ts';
-import { corriger, creerListe, decider, deciderAlerte, fixerParametres, verifierListe, type Etat } from '../src/model/journal.ts';
+import { corriger, creerListe, decider, deciderAlerte, fixerParametres, signerRegles, verifierListe, type Etat } from '../src/model/journal.ts';
 import { confronterRecu, creerRecu, lireRecu, recuEnTexte } from '../src/model/recu.ts';
 import { CHAMP_STATUT, type Liste } from '../src/model/types.ts';
 import { personne } from './aides.ts';
@@ -51,19 +51,42 @@ describe('Exclusion d’un ménage (quatre yeux)', () => {
 });
 
 describe('Paramètres et décisions d’alerte', () => {
-  it('seul un responsable fixe les paramètres, et ils sont vérifiés à l’ouverture', async () => {
+  it('seul un responsable signe des règles ; elles sont contrôlées à l’ajout et à l’ouverture', async () => {
     const { liste, etat } = await listeFictive();
-    const p = parametresParDefaut(liste.original.colonnes);
-    await expect(fixerParametres(liste, etat, a.identite, p)).rejects.toThrow(/responsable/);
-    await expect(fixerParametres(liste, etat, resp.identite, { ...p, colonnes: { nom: 'inexistante' } })).rejects.toThrow(/inconnue/);
-    await fixerParametres(liste, etat, resp.identite, { ...p, seuilDureeMinutes: 8 });
+    const regles = reglesParDefaut(liste.original.colonnes);
+    const source = { nomFichier: 'regles.xlsx', empreinteFichier: 'a'.repeat(64) };
+    await expect(signerRegles(liste, etat, a.identite, { regles, source })).rejects.toThrow(/responsable/);
+    const fausses = regles.map((r) => (r.nom === 'duree_courte' ? { ...r, colonne: 'inexistante' } : r));
+    await expect(signerRegles(liste, etat, resp.identite, { regles: fausses, source })).rejects.toThrow(/inconnue/);
+    const plusStrictes = regles.map((r) => (r.nom === 'duree_courte' ? { ...r, min: '8' } : r));
+    await signerRegles(liste, etat, resp.identite, { regles: plusStrictes, source });
     const v = await verifierListe(liste);
     expect(v.valide).toBe(true);
-    expect(v.etat.parametres?.seuilDureeMinutes).toBe(8);
+    expect(v.etat.reglesCourantes().find((r) => r.nom === 'duree_courte')?.min).toBe('8');
+    expect(calculerAlertes(v.etat, v.etat.reglesCourantes()).filter((x) => x.controle === 'duree_courte').length).toBeGreaterThanOrEqual(
+      calculerAlertes(etat, regles).filter((x) => x.controle === 'duree_courte').length,
+    );
+  });
+  it('les anciens paramètres des listes existantes sont convertis en règles équivalentes', async () => {
+    const { liste, etat } = await listeFictive();
+    const anciens = {
+      colonnes: { debut: 'start', fin: 'end', enqueteur: 'enqueteur', telephone: 'telephone' },
+      seuilDureeMinutes: 7,
+      dureeMaxHeures: 3,
+      partCourtsEnqueteur: 0.2,
+      minEntretiensEnqueteur: 5,
+      distanceNoms: 2,
+    };
+    await fixerParametres(liste, etat, resp.identite, anciens);
+    const v = await verifierListe(liste);
+    expect(v.valide).toBe(true);
+    const regles = v.etat.reglesCourantes();
+    expect(regles.find((r) => r.nom === 'duree_courte')?.min).toBe('7');
+    expect(regles.some((r) => r.nom === 'doublon_nom')).toBe(false);
   });
   it('décision signée, révisable, avec règles de rôle et de commentaire', async () => {
     const { liste, etat } = await listeFictive();
-    const alertes = calculerAlertes(etat, parametresParDefaut(liste.original.colonnes));
+    const alertes = calculerAlertes(etat, reglesParDefaut(liste.original.colonnes));
     const al = alertes.find((x) => x.categorie === 'integrite')!;
     const base = { alerte: al.id, categorie: al.categorie, menages: al.menages, commentaire: '' };
     await expect(deciderAlerte(liste, etat, a.identite, { ...base, decision: 'faux_positif' })).rejects.toThrow(/rôle/);
@@ -79,17 +102,17 @@ describe('Paramètres et décisions d’alerte', () => {
 describe('Export', () => {
   it('liste finale verrouillée tant qu’il reste des corrections ou des alertes sans décision', async () => {
     const { liste, etat } = await listeFictive();
-    let alertes = calculerAlertes(etat, parametresParDefaut(liste.original.colonnes));
+    let alertes = calculerAlertes(etat, reglesParDefaut(liste.original.colonnes));
     expect(alertes.length).toBeGreaterThan(0);
     await expect(exporter(liste, etat, alertes, resp.identite, 'liste', 'csv')).rejects.toThrow(/alerte/);
     // Le rapport, lui, reste disponible.
     await exporter(liste, etat, alertes, resp.identite, 'rapport', 'xlsx');
 
     for (const al of alertes) {
-      await deciderAlerte(liste, etat, b.identite, { alerte: al.id, categorie: al.categorie, menages: al.menages, decision: al.categorie === 'protection' ? 'orientee' : 'verification_terrain', commentaire: '' });
+      await deciderAlerte(liste, etat, b.identite, { alerte: al.id, categorie: al.categorie, menages: al.menages, decision: 'verification_terrain', commentaire: '' });
     }
     await corriger(liste, etat, a.identite, { menage: 'MN-0001', champ: 'taille_menage', ancienne: etat.valeur('MN-0001', 'taille_menage')!, nouvelle: '99', motif: 'Erreur de saisie', commentaire: '' });
-    alertes = calculerAlertes(etat, parametresParDefaut(liste.original.colonnes));
+    alertes = calculerAlertes(etat, reglesParDefaut(liste.original.colonnes));
     expect(blocages(etat, alertes)).toEqual({ correctionsEnAttente: 1, alertesSansDecision: 0 });
     await expect(exporter(liste, etat, alertes, resp.identite, 'liste', 'csv')).rejects.toThrow(/en attente/);
     await expect(exporter(liste, etat, alertes, a.identite, 'rapport', 'xlsx')).rejects.toThrow(/responsable/);

@@ -41,7 +41,7 @@ export function empreinte(hex: string, groupes = 8) {
   );
 }
 
-export function badge(texte: string, type: 'neutre' | 'attente' | 'ok' | 'refus' | 'alerte' | 'protection' = 'neutre') {
+export function badge(texte: string, type: 'neutre' | 'attente' | 'ok' | 'refus' | 'alerte' = 'neutre') {
   return h('span', { class: `badge ${type}` }, texte);
 }
 

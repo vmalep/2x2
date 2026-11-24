@@ -72,3 +72,18 @@ describe('XLSX', () => {
     });
   });
 });
+
+describe('Index ZIP (lecture à la demande)', () => {
+  it('retrouve chaque fichier sans tout décompresser', async () => {
+    const { ecrireZip, indexerZip } = await import('../src/io/zip.ts');
+    const texte = (s: string) => new TextEncoder().encode(s);
+    const archive = await ecrireZip([
+      { nom: 'tuiles/14/100/200.png', donnees: texte('A'.repeat(500)) },
+      { nom: 'tuiles/14/100/201.png', donnees: texte('B'), compresser: false },
+    ]);
+    const index = indexerZip(archive as Uint8Array<ArrayBuffer>);
+    expect([...index.keys()]).toEqual(['tuiles/14/100/200.png', 'tuiles/14/100/201.png']);
+    expect(new TextDecoder().decode(await index.get('tuiles/14/100/200.png')!())).toBe('A'.repeat(500));
+    expect(new TextDecoder().decode(await index.get('tuiles/14/100/201.png')!())).toBe('B');
+  });
+});
