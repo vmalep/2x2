@@ -7,7 +7,7 @@ import { signer, verifier, type IdentiteDeverrouillee } from '../crypto/cles.ts'
 import { depuisBase64, depuisUtf8, jsonCanonique, utf8, versBase64 } from '../crypto/encodage.ts';
 import { grouper } from '../crypto/empreinte.ts';
 import type { Liste, Utilisateur } from './types.ts';
-import { t } from '../i18n/index.ts';
+import { localeCourante, t } from '../i18n/index.ts';
 
 const PREFIXE = '2X2-RECU-1.';
 
@@ -41,12 +41,13 @@ export async function creerRecu(liste: Liste, identite: IdentiteDeverrouillee): 
 /** Texte à conserver ou à envoyer (message, courriel). La ligne « Code » fait foi. */
 export function recuEnTexte(r: Recu): string {
   return [
-    'Reçu de validation 2x2',
-    `Par : ${r.nom} (clé ${grouper(r.auteur, 4)})`,
-    `Le : ${new Date(r.le).toLocaleString('fr-BE')}`,
-    `Journal : ${r.lignes} lignes, dernière empreinte ${r.derniere.slice(0, 16)}…`,
-    `Liste : ${r.liste.slice(0, 16)}…`,
-    `Code : ${PREFIXE}${versBase64(utf8(JSON.stringify(r)))}`,
+    t('recu.titre'),
+    t('recu.par', { nom: r.nom, cle: grouper(r.auteur, 4) }),
+    t('recu.le', { date: new Date(r.le).toLocaleString(localeCourante()) }),
+    t('recu.journal', { n: r.lignes, empreinte: `${r.derniere.slice(0, 16)}…` }),
+    t('recu.liste', { empreinte: `${r.liste.slice(0, 16)}…` }),
+    // Seule cette ligne est relue (par son préfixe) : le reste peut être dans n'importe quelle langue.
+    t('recu.code', { code: `${PREFIXE}${versBase64(utf8(JSON.stringify(r)))}` }),
   ].join('\n');
 }
 

@@ -1,7 +1,10 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { calculerAlertes } from '../src/controles/controles.ts';
-import { reglesParDefaut, TYPES_REGLES } from '../src/controles/regles.ts';
+import { reglesDepuisTableau, reglesParDefaut, tableauAide, tableauDepuisRegles, TYPES_REGLES } from '../src/controles/regles.ts';
+import { tableauAlertes, tableauListeFinale } from '../src/model/export.ts';
+import { lireRetours } from '../src/model/retours.ts';
+import { tableauVisite } from '../src/model/visite.ts';
 import { genererDonneesFictives } from '../src/gen/fictif.ts';
 import { en } from '../src/i18n/en.ts';
 import { fr } from '../src/i18n/fr.ts';
@@ -111,5 +114,39 @@ describe('Données signées : codes stables, traduits seulement à l’affichage
     expect(aEn.map((a) => a.id)).toEqual(aFr.map((a) => a.id));
     expect(aEn.find((a) => a.controle === 'doublon_identifiant')!.libelle).toBe('Duplicate identity document');
     expect(aEn.find((a) => a.controle === 'doublon_telephone')!.message).toMatch(/households share the number/);
+  });
+});
+
+describe('Fichiers produits dans la langue de l’utilisateur', () => {
+  const d = genererDonneesFictives();
+  const etat = new Etat({ nomFichier: 'f', empreinteFichier: '', colonnes: d.tableau.colonnes, colonneId: 'id_menage', lignes: d.tableau.lignes });
+  const ids = ['MN-0001', 'MN-0002'];
+
+  it('feuille « Aide » du fichier de règles et colonne « actif » ; les en-têtes restent des codes', async () => {
+    definirLangue('en');
+    const aide = tableauAide(d.tableau.colonnes);
+    expect(aide.colonnes).toEqual(['Type', 'Description', 'Usage']);
+    expect(aide.lignes.find((l) => l[0] === 'duree')![1]).toBe('Duration between two dates');
+    const regles = tableauDepuisRegles(reglesParDefaut(d.tableau.colonnes, d.tableau.lignes));
+    expect(regles.colonnes).toContain('colonne_2');
+    expect(regles.lignes[0][0]).toBe('yes');
+    // Un fichier exporté en anglais se relit tel quel (oui/yes acceptés).
+    expect(reglesDepuisTableau(regles).erreurs).toEqual([]);
+  });
+
+  it('rapport des alertes et liste de visite ; une liste de visite est reconnue dans les deux langues', () => {
+    definirLangue('en');
+    expect(tableauAlertes(etat, []).colonnes).toContain('Team decision (to fill in)');
+    const visite = tableauVisite(etat, { ids, colonnes: ['village'], aVerifier: new Map() });
+    expect(visite.colonnes).toContain('To check');
+    expect(visite.colonnes).toContain('Household found (yes/no)');
+    definirLangue('fr');
+    const r = lireRetours(visite, etat, [], '');
+    expect(r.erreurs[0]).toMatch(/liste de visite/);
+  });
+
+  it('liste finale : colonnes de l’export d’origine, quelle que soit la langue', () => {
+    definirLangue('en');
+    expect(tableauListeFinale(etat).colonnes).toEqual(d.tableau.colonnes);
   });
 });

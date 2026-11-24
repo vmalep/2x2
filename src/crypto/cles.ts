@@ -107,9 +107,10 @@ const PREFIXE_CLE = '2X2-CLE-1.';
 /** Clé publique sous forme de texte, à coller dans un message. La ligne « Code » fait foi. */
 export function clePubliqueEnTexte(f: FichierClePublique): string {
   return [
-    `Clé publique 2x2 de ${f.nom}`,
-    `Empreinte : ${grouper(f.empreinte, 8)}`,
-    `Code : ${PREFIXE_CLE}${versBase64(utf8(JSON.stringify(f)))}`,
+    t('cle_texte.titre', { nom: f.nom }),
+    t('cle_texte.empreinte', { empreinte: grouper(f.empreinte, 8) }),
+    // Seule la ligne « Code » est relue (par son préfixe 2X2-CLE-1.).
+    t('recu.code', { code: `${PREFIXE_CLE}${versBase64(utf8(JSON.stringify(f)))}` }),
   ].join('\n');
 }
 

@@ -106,6 +106,9 @@ fichier chiffré (enregistrement direct sous Chrome/Edge, téléchargement aille
   forme française d'origine, et ne sont traduits qu'à l'affichage ; les listes existantes s'ouvrent et se vérifient comme avant.
   Les règles par défaut reçoivent un libellé dans la langue de l'utilisateur, sans changer leur nom (les identifiants d'alerte
   et les décisions déjà prises restent rattachés) ; un fichier de règles importé garde ses propres libellés. Les commentaires restent tels qu'écrits.
+- **Fichiers produits** dans la langue de l'utilisateur : feuille « Aide » du fichier de règles (les en-têtes `actif`, `nom`, `libelle`…
+  restent des codes, oui/yes et non/no sont acceptés), rapport des alertes, liste de visite et ses consignes, métadonnées des exports,
+  reçus et clés publiques en texte (seule la ligne « Code » est relue). La liste finale (CSV de paiement) garde les colonnes de l'export d'origine.
 
 Hors périmètre du prototype : détection d'anomalies par apprentissage, import natif des plateformes de paiement, travail simultané.
 

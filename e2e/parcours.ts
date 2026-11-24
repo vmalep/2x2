@@ -10,7 +10,7 @@ import { chromium, type Page } from 'playwright-core';
 import { clePubliqueEnTexte } from '../src/crypto/cles.ts';
 import { lireCsv } from '../src/io/csv.ts';
 import { lireXlsx, ecrireXlsx } from '../src/io/xlsx.ts';
-import { ecrireZip } from '../src/io/zip.ts';
+import { ecrireZip, lireZip } from '../src/io/zip.ts';
 import { chiffrerListe, dechiffrerListe } from '../src/model/fichier-liste.ts';
 import { DICTIONNAIRES, sansMiseEnForme, tl, type Cle, type Langue, type Params } from '../src/i18n/index.ts';
 
@@ -275,7 +275,7 @@ async function parcours() {
     await attendreFinTraitement(page);
     const tv = await lireXlsx(new Uint8Array(readFileSync(fichierVisite)));
     verifier(
-      tv.lignes.length === nVisite && tv.colonnes.includes('À vérifier') && tv.colonnes.includes('Ménage trouvé (oui/non)') && tv.colonnes.includes('nom_chef_menage') && !tv.colonnes.includes('age_chef_menage'),
+      tv.lignes.length === nVisite && tv.colonnes.includes(T('visite.retour_a_verifier')) && tv.colonnes.includes(T('visite.retour_trouve')) && tv.colonnes.includes('nom_chef_menage') && !tv.colonnes.includes('age_chef_menage'),
       `liste de visite : ${tv.lignes.length} ménages, colonnes utiles seulement, alertes et colonnes de retour`,
     );
     await page.getByRole('button', { name: new RegExp('^' + echapper(prefixe('visite.ouvrir_n'))) }).click();
@@ -407,7 +407,9 @@ async function parcours() {
     const [fichierRegles] = await telechargements(page, 1, () => page.getByRole('button', { name: T('regles.exporter_xlsx') }).click());
     await attendreFinTraitement(page);
     const tr = await lireXlsx(new Uint8Array(readFileSync(fichierRegles)));
-    const iNom = tr.colonnes.indexOf('nom');
+    const classeurRegles = new TextDecoder().decode((await lireZip(new Uint8Array(readFileSync(fichierRegles))))!.get('xl/workbook.xml')!);
+    verifier(classeurRegles.includes(`name="${T('fichier.feuille_aide')}"`) && tr.lignes.every((l) => [T('fichier.oui'), T('fichier.non')].includes(l[0])), `fichier de règles en ${L} : feuille d’aide et colonne « actif »`);
+  const iNom = tr.colonnes.indexOf('nom');
     tr.lignes.find((l) => l[iNom] === 'duree_courte')![tr.colonnes.indexOf('min')] = '13';
     const modifie = join(dossier, 'regles_modifiees.xlsx');
     writeFileSync(modifie, await ecrireXlsx([{ nom: 'Règles', tableau: tr }]));
@@ -606,6 +608,12 @@ async function parcours() {
     const [ods] = await telechargements(page, 1, () => page.getByRole('button', { name: T('export.ods') }).nth(1).click());
     await attendreFinTraitement(page);
     verifier(ods.endsWith('.ods'), 'rapport des alertes en ODS');
+    const contenuOds = new TextDecoder().decode((await lireZip(new Uint8Array(readFileSync(ods))))!.get('content.xml')!);
+    verifier(
+      contenuOds.includes(`table:name="${T('rapport.feuille_alertes')}"`) && contenuOds.includes(T('rapport.decision_equipe')) && contenuOds.includes(T('meta.verification_texte').slice(0, 20)),
+      `rapport des alertes en ${L} (feuilles, colonnes, métadonnées)`,
+    );
+    verifier(finale.colonnes.join('|') === (await lireXlsx(new Uint8Array(readFileSync(xlsx)))).colonnes.join('|'), 'liste finale CSV : colonnes de l’export d’origine, inchangées');
     await choisir(page, csv, () => page.getByRole('button', { name: T('export.choisir') }).click());
     await attendreFinTraitement(page);
     verifier(await visible(page.getByText(phrase('export.authentique', { fichier: '', n: 0, nom: '', date: '', lignes: 0 }) + '.')), 'l’export CSV est reconnu par le journal');
@@ -634,7 +642,7 @@ async function parcours() {
 
     console.log('Étape 2 : suppression des dernières lignes, détectée par le reçu');
     const complete = await dechiffrerListe(readFileSync(liste6, 'utf8'), MDP_LISTE);
-    const recuParse = /Journal : (\d+) lignes/.exec(recu)!;
+    const recuParse = new RegExp(echapper(prefixe('recu.journal')) + '(\\d+)').exec(recu)!;
     complete.journal.splice(Number(recuParse[1]) - 2);
     const tronquee = join(dossier, 'liste_tronquee.2x2');
     writeFileSync(tronquee, await chiffrerListe(complete, MDP_LISTE));

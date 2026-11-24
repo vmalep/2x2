@@ -5,7 +5,7 @@ import { CHAMP_STATUT, DECISIONS_ALERTE, MOTIFS_EXCLUSION, libelleMotif, motifsP
 import { badge, bouton, encadre } from '../composants.ts';
 import { dateLisible, h, remplacer, tr } from '../dom.ts';
 import { telecharger } from '../fichiers.ts';
-import { COLONNES_RETOUR, exporterVisite, NOM_PRECHARGEMENT } from '../../model/visite.ts';
+import { colonnesRetour, exporterVisite, NOM_PRECHARGEMENT } from '../../model/visite.ts';
 import { detecterColonnes } from '../../controles/parametres.ts';
 import { formulaireRevisite, lireRetours, type ActionRetour } from '../../model/retours.ts';
 import { lireExport } from '../../io/import.ts';
@@ -1014,7 +1014,7 @@ function panneauVisite(cochés: () => string[], aVerifier: (id: string) => strin
       { class: 'choix-colonnes' },
       [...choix].map(([nom, c]) => h('label', { class: 'case' }, c, nom === colDate ? t('visite.col_date', { nom }) : nom === colEnq ? t('visite.col_enqueteur', { nom }) : nom)),
     ),
-    h('p', { class: 'aide' }, t('visite.ajoutees', { colonnes: COLONNES_RETOUR.join(', ') })),
+    h('p', { class: 'aide' }, t('visite.ajoutees', { colonnes: colonnesRetour().join(', ') })),
     encadre('alerte', t('visite.avertissement')),
     h(
       'div',

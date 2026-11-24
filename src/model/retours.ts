@@ -13,7 +13,8 @@ import type { Tableau } from '../io/tableau.ts';
 import type { FeuilleXlsx } from '../io/xlsx.ts';
 import { cellule, type Etat } from './journal.ts';
 import { CHAMP_STATUT, MOTIFS_EXCLUSION, libelleMotif, type Motif } from './types.ts';
-import { NOM_PRECHARGEMENT, nomKobo } from './visite.ts';
+import { colonneAVerifier, colonnesRetour, NOM_PRECHARGEMENT, nomKobo } from './visite.ts';
+import { LANGUES } from '../i18n/index.ts';
 import { t } from '../i18n/index.ts';
 
 const FICHIER = NOM_PRECHARGEMENT.replace(/\.csv$/, '');
@@ -154,7 +155,8 @@ export function lireRetours(source: Tableau, etat: Etat, alertes: Alerte[], colo
   const indice = (n: string) => tab.colonnes.findIndex((c) => nom(c) === n);
   const iMenage = indice('menage');
   if (iMenage < 0) {
-    const listeDeVisite = tab.colonnes.includes('À vérifier') && tab.colonnes.some((c) => c.startsWith('Ménage trouvé'));
+    // Liste de visite produite par 2x2, dans l'une ou l'autre langue.
+    const listeDeVisite = LANGUES.some((l) => tab.colonnes.includes(colonneAVerifier(l)) && tab.colonnes.includes(colonnesRetour(l)[1]));
     return {
       actions: [],
       erreurs: [

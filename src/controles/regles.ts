@@ -260,7 +260,7 @@ export function validerRegles(regles: Regle[], colonnes: string[]): string[] {
 export function tableauDepuisRegles(regles: Regle[]): Tableau {
   return {
     colonnes: [...COLONNES_FICHIER],
-    lignes: regles.map((r) => [r.actif ? 'oui' : 'non', r.nom, r.libelle, r.type, r.colonne, r.colonne2, r.min, r.max, r.liste]),
+    lignes: regles.map((r) => [r.actif ? t('fichier.oui') : t('fichier.non'), r.nom, r.libelle, r.type, r.colonne, r.colonne2, r.min, r.max, r.liste]),
   };
 }
 
@@ -295,14 +295,16 @@ export function reglesDepuisTableau(tab: Tableau): { regles: Regle[]; erreurs: s
 /** Feuille d'aide jointe au fichier de règles exporté : types et colonnes disponibles. */
 export function tableauAide(colonnesListe: string[]): Tableau {
   return {
-    colonnes: ['Type', 'Description', 'Utilisation'],
+    colonnes: [t('fichier.aide_type'), t('fichier.aide_description'), t('fichier.aide_utilisation')],
     lignes: [
       ...(Object.keys(TYPES_REGLES) as TypeRegle[]).map((type) => [type, libelleType(type), aideType(type)]),
       ['', '', ''],
-      ['actif', 'oui / non', 'Une règle à « non » reste dans le fichier mais n’est pas appliquée.'],
-      ['nom', 'Identifiant', 'Minuscules, chiffres et « _ ». Ne le changez pas si des décisions ont déjà été prises : elles y sont rattachées.'],
+      ['actif', t('fichier.aide_actif'), t('fichier.aide_actif_texte')],
+      ['nom', t('fichier.aide_nom'), t('fichier.aide_nom_texte')],
+      ['libelle', t('fichier.aide_libelle'), t('fichier.aide_libelle_texte')],
+      ['type, colonne, colonne_2, min, max, liste', t('fichier.aide_parametres'), t('fichier.aide_parametres_texte')],
       ['', '', ''],
-      ['Colonnes de la liste', '', colonnesListe.join(' ; ')],
+      [t('fichier.aide_colonnes'), '', colonnesListe.join(t('alerte.separateur'))],
     ],
   };
 }

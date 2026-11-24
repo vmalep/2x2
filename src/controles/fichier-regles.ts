@@ -12,8 +12,8 @@ export type FormatRegles = 'xlsx' | 'ods' | 'csv';
 
 export async function exporterRegles(regles: Regle[], colonnesListe: string[], format: FormatRegles): Promise<{ octets: Octets; type: string }> {
   const feuilles: FeuilleXlsx[] = [
-    { nom: 'Règles', tableau: tableauDepuisRegles(regles), largeurs: [7, 24, 40, 18, 26, 26, 10, 10, 30] },
-    { nom: 'Aide', tableau: tableauAide(colonnesListe), largeurs: [22, 34, 110] },
+    { nom: t('fichier.feuille_regles'), tableau: tableauDepuisRegles(regles), largeurs: [7, 24, 40, 18, 26, 26, 10, 10, 30] },
+    { nom: t('fichier.feuille_aide'), tableau: tableauAide(colonnesListe), largeurs: [22, 34, 110] },
   ];
   if (format === 'csv') return { octets: new TextEncoder().encode(ecrireCsv(feuilles[0].tableau)) as Octets, type: 'text/csv' };
   if (format === 'ods') return { octets: await ecrireOds(feuilles), type: 'application/vnd.oasis.opendocument.spreadsheet' };
