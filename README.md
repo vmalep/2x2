@@ -18,6 +18,7 @@ npm test             # tests automatisés (crypto, journal, ZIP/XLSX/CSV, géné
 npm run e2e          # parcours complet à deux personnes dans Chrome (après build), en français puis en anglais
                      # (LANGUES=en npm run e2e pour une seule langue)
 npm run fictif       # écrit un export Kobo fictif dans fictif/ (CSV, XLSX, vérité des anomalies)
+npm run manuel       # manuel PDF en français et en anglais (après build) : docs/manuel/sortie/manuel_2x2_vX.Y.Z.pdf et …_en.pdf
 ```
 
 `dist/2x2-vX.Y.Z.html` (version tirée de `package.json`) s'ouvre directement depuis le disque (double-clic), sans serveur ni installation.
@@ -99,7 +100,7 @@ fichier chiffré (enregistrement direct sous Chrome/Edge, téléchargement aille
   rapport des alertes et des corrections (XLSX, ODS) avec colonnes de décision à remplir, disponible à tout moment.
   Chaque export porte l'empreinte du journal et s'inscrit au journal avec sa propre empreinte : « Vérifier un fichier exporté » reconnaît un fichier authentique et rejette un fichier retouché.
 
-**Bilingue français / anglais (en cours, v0.15)** :
+**Bilingue français / anglais (v0.15)** :
 - **Interface et aide intégrée** traduites ; sélecteur FR / EN dans l'en-tête. La langue de départ suit celle du navigateur
   (français, sinon anglais) ; le choix est mémorisé dans ce navigateur.
 - **Données signées inchangées** : les motifs (« Erreur de saisie »…) et les codes de décision restent inscrits au journal sous leur
@@ -111,6 +112,8 @@ fichier chiffré (enregistrement direct sous Chrome/Edge, téléchargement aille
   reçus et clés publiques en texte (seule la ligne « Code » est relue). La liste finale (CSV de paiement) garde les colonnes de l'export d'origine.
 - **Formulaire Kobo de revisite multilingue** : `label::Français (fr)` / `label::English (en)`, de même pour les aides et les choix ;
   langue par défaut = celle de l'utilisateur. L'import des retours du terrain accepte un export avec libellés dans l'une ou l'autre langue.
+- **Manuel d'utilisation en anglais** : `docs/manuel/scenario.ts en` joue le scénario avec l'interface en anglais,
+  `docs/manuel/construire.ts en` produit `manuel_2x2_vX.Y.Z_en.pdf` à côté du manuel français.
 
 Hors périmètre du prototype : détection d'anomalies par apprentissage, import natif des plateformes de paiement, travail simultané.
 

@@ -1,6 +1,6 @@
 {
   "name": "2x2",
-  "version": "0.15.2",
+  "version": "0.15.3",
   "private": true,
   "description": "2x2 : outil d'intégrité des listes de bénéficiaires (prototype, données fictives uniquement)",
   "license": "MIT",
@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "fictif": "tsx scripts/generer-fictif.ts",
-    "e2e": "tsx e2e/parcours.ts"
+    "e2e": "tsx e2e/parcours.ts",
+    "manuel": "tsx docs/manuel/scenario.ts fr && tsx docs/manuel/construire.ts fr && tsx docs/manuel/scenario.ts en && tsx docs/manuel/construire.ts en"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
