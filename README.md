@@ -109,6 +109,8 @@ fichier chiffré (enregistrement direct sous Chrome/Edge, téléchargement aille
 - **Fichiers produits** dans la langue de l'utilisateur : feuille « Aide » du fichier de règles (les en-têtes `actif`, `nom`, `libelle`…
   restent des codes, oui/yes et non/no sont acceptés), rapport des alertes, liste de visite et ses consignes, métadonnées des exports,
   reçus et clés publiques en texte (seule la ligne « Code » est relue). La liste finale (CSV de paiement) garde les colonnes de l'export d'origine.
+- **Formulaire Kobo de revisite multilingue** : `label::Français (fr)` / `label::English (en)`, de même pour les aides et les choix ;
+  langue par défaut = celle de l'utilisateur. L'import des retours du terrain accepte un export avec libellés dans l'une ou l'autre langue.
 
 Hors périmètre du prototype : détection d'anomalies par apprentissage, import natif des plateformes de paiement, travail simultané.
 

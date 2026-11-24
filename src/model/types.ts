@@ -1,6 +1,6 @@
 import type { ClePubliqueJwk } from '../crypto/cles.ts';
 import type { Regle } from '../controles/regles.ts';
-import { libelles, t, type Cle } from '../i18n/index.ts';
+import { langueCourante, libelles, tl, type Cle, type Langue } from '../i18n/index.ts';
 
 export type Role = 'responsable' | 'correction' | 'validation';
 
@@ -70,10 +70,10 @@ const CLES_MOTIFS: Record<Motif, Cle> = {
   'Fraude suspectée': 'motif.fraude_suspectee',
 };
 
-/** Libellé affiché d'un motif (code du journal). Un motif inconnu s'affiche tel quel. */
-export function libelleMotif(m: string): string {
+/** Libellé affiché d'un motif (code du journal), dans la langue courante ou donnée. Un motif inconnu s'affiche tel quel. */
+export function libelleMotif(m: string, l: Langue = langueCourante()): string {
   const cle = CLES_MOTIFS[m as Motif];
-  return cle ? t(cle) : m;
+  return cle ? tl(l, cle) : m;
 }
 
 /** Tous les motifs reconnus par le journal. */

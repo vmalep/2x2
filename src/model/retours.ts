@@ -14,62 +14,79 @@ import type { FeuilleXlsx } from '../io/xlsx.ts';
 import { cellule, type Etat } from './journal.ts';
 import { CHAMP_STATUT, MOTIFS_EXCLUSION, libelleMotif, type Motif } from './types.ts';
 import { colonneAVerifier, colonnesRetour, NOM_PRECHARGEMENT, nomKobo } from './visite.ts';
-import { LANGUES } from '../i18n/index.ts';
-import { t } from '../i18n/index.ts';
+import { LANGUES, langueCourante, t, tl, type Cle, type Langue } from '../i18n/index.ts';
 
 const FICHIER = NOM_PRECHARGEMENT.replace(/\.csv$/, '');
 
 /** Code Kobo stable pour un motif d'exclusion (« Ménage parti ou dissous » → menage_parti_ou_dissous). */
 const codeMotif = (m: string) => nomKobo(m).slice(0, 40);
 
+/** Langues du formulaire : en-têtes XLSForm « label::Français (fr) », « label::English (en) ». */
+export const LANGUES_KOBO: Record<Langue, string> = { fr: 'Français (fr)', en: 'English (en)' };
+
+/** Libellé (et aide) d'une question ou d'un choix, dans chaque langue du formulaire. */
+const parLangue = (cle: Cle | undefined) => LANGUES.map((l) => (cle ? tl(l, cle) : ''));
+
 /**
- * XLSForm du formulaire de revisite. Les champs corrigeables proposés sont les colonnes de
- * l'export d'origine (hors colonnes techniques et identifiant).
+ * XLSForm multilingue du formulaire de revisite : libellés, aides et choix en français et en
+ * anglais ; la langue par défaut est celle de l'utilisateur. Les champs corrigeables proposés
+ * sont les colonnes de l'export d'origine (hors colonnes techniques et identifiant).
  */
 export function formulaireRevisite(colonnesCorrigeables: string[]): FeuilleXlsx[] {
-  const survey: string[][] = [
-    ['start', 'start', '', '', '', ''],
-    ['end', 'end', '', '', '', ''],
-    ['today', 'today', '', '', '', ''],
-    [`select_one_from_file ${NOM_PRECHARGEMENT}`, 'menage', 'Ménage à revoir', 'yes', '', 'autocomplete'],
-    ['calculate', 'infos', '', '', '', ''],
-    ['calculate', 'a_verifier', '', '', '', ''],
-    ['note', 'note_infos', 'Ménage : ${infos}', '', '', ''],
-    ['note', 'note_a_verifier', 'À vérifier : ${a_verifier}', '', '', ''],
-    ['select_one oui_non', 'trouve', 'Le ménage a-t-il été trouvé ?', 'yes', '', ''],
-    ['select_one resultat', 'resultat', 'Résultat de la vérification', 'yes', "${trouve} = 'oui'", ''],
-    ['select_one champs', 'champ', 'Champ à corriger', 'yes', "${resultat} = 'donnee_fausse'", 'minimal'],
-    ['text', 'valeur', 'Valeur constatée', 'yes', "${resultat} = 'donnee_fausse'", ''],
-    ['select_one motif_exclusion', 'motif_exclusion', 'Motif de l’exclusion', 'yes', "${resultat} = 'a_exclure'", ''],
-    ['text', 'constat', 'Constat (ce qui a été vu ou dit)', 'yes', '', 'multiline'],
-    ['geopoint', 'gps_visite', 'Position de la visite', 'yes', '', ''],
-    ['text', 'visiteur', 'Nom de la personne qui visite', 'yes', '', ''],
+  // type, name, libellé, aide, required, relevant, appearance
+  const questions: [string, string, Cle | undefined, Cle | undefined, string, string, string][] = [
+    ['start', 'start', undefined, undefined, '', '', ''],
+    ['end', 'end', undefined, undefined, '', '', ''],
+    ['today', 'today', undefined, undefined, '', '', ''],
+    [`select_one_from_file ${NOM_PRECHARGEMENT}`, 'menage', 'kobo.menage', 'kobo.menage_aide', 'yes', '', 'autocomplete'],
+    ['calculate', 'infos', undefined, undefined, '', '', ''],
+    ['calculate', 'a_verifier', undefined, undefined, '', '', ''],
+    ['note', 'note_infos', 'kobo.note_infos', undefined, '', '', ''],
+    ['note', 'note_a_verifier', 'kobo.note_a_verifier', undefined, '', '', ''],
+    ['select_one oui_non', 'trouve', 'kobo.trouve', undefined, 'yes', '', ''],
+    ['select_one resultat', 'resultat', 'kobo.resultat', undefined, 'yes', "${trouve} = 'oui'", ''],
+    ['select_one champs', 'champ', 'kobo.champ', undefined, 'yes', "${resultat} = 'donnee_fausse'", 'minimal'],
+    ['text', 'valeur', 'kobo.valeur', 'kobo.valeur_aide', 'yes', "${resultat} = 'donnee_fausse'", ''],
+    ['select_one motif_exclusion', 'motif_exclusion', 'kobo.motif', undefined, 'yes', "${resultat} = 'a_exclure'", ''],
+    ['text', 'constat', 'kobo.constat', undefined, 'yes', '', 'multiline'],
+    ['geopoint', 'gps_visite', 'kobo.gps', 'kobo.gps_aide', 'yes', '', ''],
+    ['text', 'visiteur', 'kobo.visiteur', undefined, 'yes', '', ''],
   ];
   const calculs: Record<string, string> = {
     infos: `pulldata('${FICHIER}', 'infos', 'name', \${menage})`,
     a_verifier: `pulldata('${FICHIER}', 'a_verifier', 'name', \${menage})`,
   };
+  const choix = (liste: string, code: string, cle: Cle) => [liste, code, ...parLangue(cle)];
   const choices: string[][] = [
-    ['oui_non', 'oui', 'Oui'],
-    ['oui_non', 'non', 'Non (introuvable ou inexistant)'],
-    ['resultat', 'conforme', 'Données conformes : pas de problème'],
-    ['resultat', 'donnee_fausse', 'Une donnée est fausse (à corriger)'],
-    ['resultat', 'a_exclure', 'Le ménage doit être exclu'],
-    ...colonnesCorrigeables.map((c) => ['champs', nomKobo(c), c]),
-    ...MOTIFS_EXCLUSION.map((m) => ['motif_exclusion', codeMotif(m), m]),
+    choix('oui_non', 'oui', 'kobo.oui'),
+    choix('oui_non', 'non', 'kobo.non'),
+    choix('resultat', 'conforme', 'kobo.conforme'),
+    choix('resultat', 'donnee_fausse', 'kobo.donnee_fausse'),
+    choix('resultat', 'a_exclure', 'kobo.a_exclure'),
+    // Colonnes de l'export : leur nom, le même dans toutes les langues.
+    ...colonnesCorrigeables.map((c) => ['champs', nomKobo(c), ...LANGUES.map(() => c)]),
+    // Motifs : code stable (dérivé du motif français signé au journal), libellé traduit.
+    ...MOTIFS_EXCLUSION.map((m) => ['motif_exclusion', codeMotif(m), ...LANGUES.map((l) => libelleMotif(m, l))]),
   ];
+  const label = LANGUES.map((l) => `label::${LANGUES_KOBO[l]}`);
+  const hint = LANGUES.map((l) => `hint::${LANGUES_KOBO[l]}`);
   return [
     {
       nom: 'survey',
       tableau: {
-        colonnes: ['type', 'name', 'label', 'required', 'relevant', 'appearance', 'calculation'],
-        lignes: survey.map((l) => [...l, calculs[l[1]] ?? '']),
+        colonnes: ['type', 'name', ...label, ...hint, 'required', 'relevant', 'appearance', 'calculation'],
+        lignes: questions.map(([type, name, lib, aide, required, relevant, appearance]) => [
+          type, name, ...parLangue(lib), ...parLangue(aide), required, relevant, appearance, calculs[name] ?? '',
+        ]),
       },
     },
-    { nom: 'choices', tableau: { colonnes: ['list_name', 'name', 'label'], lignes: choices } },
+    { nom: 'choices', tableau: { colonnes: ['list_name', 'name', ...label], lignes: choices } },
     {
       nom: 'settings',
-      tableau: { colonnes: ['form_title', 'form_id', 'version'], lignes: [['Revisite des ménages (2x2)', 'revisite_2x2', new Date().toISOString().slice(0, 10).replace(/-/g, '')]] },
+      tableau: {
+        colonnes: ['form_title', 'form_id', 'version', 'default_language'],
+        lignes: [[t('kobo.titre'), 'revisite_2x2', new Date().toISOString().slice(0, 10).replace(/-/g, ''), LANGUES_KOBO[langueCourante()]]],
+      },
     },
   ];
 }
@@ -121,8 +138,10 @@ function depuisLibelles(t: Tableau, etat: Etat): Tableau {
   if (t.colonnes.some((c) => nom(c) === 'menage')) return t;
   const formulaire = formulaireRevisite(etat.original.colonnes.filter((c) => c !== etat.original.colonneId));
   const [survey, choices] = formulaire;
+  // L'export peut avoir été fait dans n'importe quelle langue du formulaire : tous les libellés sont reconnus.
+  const colonnesLibelles = (tab: Tableau) => tab.colonnes.flatMap((c, i) => (c.startsWith('label::') ? [i] : []));
   const parLibelle = new Map<string, string>();
-  for (const l of survey.tableau.lignes) if (l[2]) parLibelle.set(l[2], l[1]);
+  for (const l of survey.tableau.lignes) for (const i of colonnesLibelles(survey.tableau)) if (l[i]) parLibelle.set(l[i], l[1]);
   // Colonnes éclatées d'un point GPS : « _Position de la visite_latitude » → « _gps_visite_latitude ».
   const traduireEntete = (c: string) => {
     const n = nom(c);
@@ -134,9 +153,9 @@ function depuisLibelles(t: Tableau, etat: Etat): Tableau {
   const colonnes = t.colonnes.map(traduireEntete);
   // Codes des choix, par question : libellé → code.
   const listes = new Map<string, Map<string, string>>();
-  for (const [liste, code, libelle] of choices.tableau.lignes) {
+  for (const [liste, code, ...libelles] of choices.tableau.lignes) {
     if (!listes.has(liste)) listes.set(liste, new Map());
-    listes.get(liste)!.set(libelle, code);
+    for (const libelle of libelles) listes.get(liste)!.set(libelle, code);
   }
   const listeDeQuestion = new Map(survey.tableau.lignes.filter((l) => l[0].startsWith('select_one ')).map((l) => [l[1], l[0].slice('select_one '.length)]));
   const lignes = t.lignes.map((l) =>

@@ -1,6 +1,6 @@
 {
   "name": "2x2",
-  "version": "0.15.1",
+  "version": "0.15.2",
   "private": true,
   "description": "2x2 : outil d'intégrité des listes de bénéficiaires (prototype, données fictives uniquement)",
   "license": "MIT",
