@@ -9,6 +9,15 @@ Le nom : deux personnes, quatre yeux.
 
 **Prototype sur données fictives uniquement.** Ne l'utilisez pas avec des données réelles.
 
+## Télécharger · Download
+
+**[Télécharger la dernière version](https://github.com/vmalep/2x2/releases/latest)** : l'outil (`2x2-vX.Y.Z.html`, un seul fichier
+à ouvrir dans un navigateur, en français ou en anglais) et le manuel d'utilisation en PDF, en français et en anglais.
+
+*English:* **[download the latest release](https://github.com/vmalep/2x2/releases/latest)**: the tool (`2x2-vX.Y.Z.html`, a single
+file to open in a browser, in French or English) and the user manual as PDF, in French and English.
+Prototype: use fictitious data only.
+
 ## Utilisation
 
 ```bash
