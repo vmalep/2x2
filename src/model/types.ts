@@ -1,4 +1,5 @@
 import type { ClePubliqueJwk } from '../crypto/cles.ts';
+import type { Regle } from '../controles/regles.ts';
 
 export type Role = 'responsable' | 'correction' | 'validation';
 
@@ -26,15 +27,34 @@ export interface Original {
   lignes: string[][];
 }
 
-export const MOTIFS = [
-  'Erreur de saisie',
-  'Vérification terrain',
+const AUTRE = 'Autre (préciser en commentaire)';
+
+/** Motifs proposés pour corriger une valeur. */
+export const MOTIFS_CORRECTION = ['Erreur de saisie', 'Vérification terrain', 'Changement de situation', AUTRE] as const;
+
+/** Motifs proposés pour exclure un ménage de la liste finale. Une simple suspicion appelle une vérification, pas une exclusion. */
+export const MOTIFS_EXCLUSION = [
   'Doublon',
-  'Fraude suspectée',
-  'Changement de situation',
-  'Autre (préciser en commentaire)',
+  'Ménage introuvable ou inexistant',
+  'Fraude avérée',
+  'Ne remplit pas les critères d’éligibilité',
+  'Ménage parti ou dissous',
+  AUTRE,
 ] as const;
-export type Motif = (typeof MOTIFS)[number];
+
+/** Motifs proposés pour réintégrer un ménage exclu. */
+export const MOTIFS_REINTEGRATION = ['Exclusion erronée', 'Situation régularisée', AUTRE] as const;
+
+/** Anciens motifs (premières versions) : toujours acceptés pour relire les listes existantes. */
+const MOTIFS_ANCIENS = ['Fraude suspectée'] as const;
+
+/** Tous les motifs reconnus par le journal. */
+export const MOTIFS = [...new Set([...MOTIFS_CORRECTION, ...MOTIFS_EXCLUSION, ...MOTIFS_REINTEGRATION, ...MOTIFS_ANCIENS])] as readonly Motif[];
+export type Motif =
+  | (typeof MOTIFS_CORRECTION)[number]
+  | (typeof MOTIFS_EXCLUSION)[number]
+  | (typeof MOTIFS_REINTEGRATION)[number]
+  | (typeof MOTIFS_ANCIENS)[number];
 
 export interface ContenuOuverture {
   original: { nomFichier: string; empreinteFichier: string; empreinteContenu: string; colonneId: string; nombreLignes: number };
@@ -61,6 +81,12 @@ export interface ContenuDecision {
 export const CHAMP_STATUT = '2x2_statut';
 export const STATUTS = ['inclus', 'exclu'] as const;
 
+/** Motifs à proposer selon ce qui change : une valeur, une exclusion ou une réintégration. */
+export function motifsPour(champ: string, ancienne: string): readonly Motif[] {
+  if (champ !== CHAMP_STATUT) return MOTIFS_CORRECTION;
+  return ancienne === 'exclu' ? MOTIFS_REINTEGRATION : MOTIFS_EXCLUSION;
+}
+
 /** Correspondance des colonnes de l'export utilisées par les contrôles. */
 export interface ColonnesControles {
   debut?: string;
@@ -70,8 +96,8 @@ export interface ColonnesControles {
   telephone?: string;
   nom?: string;
   village?: string;
-  enfantNonAccompagne?: string;
-  ageChef?: string;
+  /** Numéro de pièce d'identité (ou tout identifiant de personne censé être unique). */
+  identifiant?: string;
 }
 
 export interface Parametres {
@@ -88,23 +114,34 @@ export interface Parametres {
   distanceNoms: number;
 }
 
+/**
+ * Seule la catégorie « intégrité » est produite. « protection » n'existe que pour relire les fichiers
+ * créés par une version antérieure : le repérage protection se fait en dehors de l'outil.
+ */
 export type CategorieAlerte = 'integrite' | 'protection';
 
 export const DECISIONS_ALERTE: Record<CategorieAlerte, Record<string, string>> = {
   integrite: {
     confirmee: 'Anomalie confirmée',
     verification_terrain: 'À vérifier sur le terrain',
-    faux_positif: 'Faux positif',
+    faux_positif: 'Vérifiée : pas de problème',
   },
   protection: {
     orientee: 'Orientée vers les services adaptés',
     deja_suivie: 'Déjà suivie',
-    faux_positif: 'Faux positif',
+    faux_positif: 'Vérifiée : pas de situation de protection',
   },
 };
 
+/** Ancien format (paramètres fixes) : conservé pour relire les listes créées avant les règles. */
 export interface ContenuParametres {
   parametres: Parametres;
+}
+/** Jeu de règles de contrôle, signé : il remplace intégralement le précédent. */
+export interface ContenuRegles {
+  regles: Regle[];
+  /** Fichier importé (nom et SHA-256), ou null si les règles ont été produites par l'outil. */
+  source: { nomFichier: string; empreinteFichier: string } | null;
 }
 export interface ContenuDecisionAlerte {
   alerte: string;
@@ -114,8 +151,11 @@ export interface ContenuDecisionAlerte {
   commentaire: string;
 }
 export interface ContenuExport {
-  /** Nature de l'export : liste finale ou rapport des alertes. */
-  nature: 'liste' | 'rapport';
+  /**
+   * Nature de l'export : liste finale, rapport des alertes, liste de visite terrain,
+   * ou fichier de préchargement pour un formulaire Kobo de revisite.
+   */
+  nature: 'liste' | 'rapport' | 'visite' | 'kobo';
   format: 'csv' | 'xlsx' | 'ods';
   nomFichier: string;
   /** SHA-256 du fichier exporté : permet de vérifier plus tard qu'un fichier est authentique. */
@@ -124,6 +164,10 @@ export interface ContenuExport {
   lignesJournal: number;
   empreinteJournal: string;
   menages: number;
+  /** Listes de visite et préchargement Kobo : colonnes de données personnelles sorties de l'outil. */
+  colonnes?: string[];
+  /** Listes de visite et préchargement Kobo : identifiants des ménages concernés. */
+  identifiants?: string[];
 }
 
 export type CorpsEntree =
@@ -132,6 +176,7 @@ export type CorpsEntree =
   | { type: 'correction'; contenu: ContenuCorrection }
   | { type: 'decision'; contenu: ContenuDecision }
   | { type: 'parametres'; contenu: ContenuParametres }
+  | { type: 'regles'; contenu: ContenuRegles }
   | { type: 'decision_alerte'; contenu: ContenuDecisionAlerte }
   | { type: 'export'; contenu: ContenuExport };
 

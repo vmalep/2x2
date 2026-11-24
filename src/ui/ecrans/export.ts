@@ -1,8 +1,9 @@
-import { blocages, exporter, exportPossible, verifierFichierExporte, type FormatExport, type Nature } from '../../model/export.ts';
+import { LIBELLES_NATURE, blocages, exporter, exportPossible, verifierFichierExporte, type FormatExport, type Nature } from '../../model/export.ts';
+import { allerValidation } from './validation.ts';
 import { badge, bouton, carte, encadre } from '../composants.ts';
 import { dateLisible, h, remplacer } from '../dom.ts';
 import { choisirFichier, telecharger } from '../fichiers.ts';
-import { alertesCourantes, aller, apresModification, nomAuteur, notifier, occupe, peut, session } from '../session.ts';
+import { alertesCourantes, apresModification, nomAuteur, notifier, occupe, peut, session } from '../session.ts';
 
 function exporterVers(nature: Nature, format: FormatExport) {
   occupe('Préparation de l’export…', async () => {
@@ -53,13 +54,13 @@ export function ecranExport() {
   const o = session.liste!.original;
   const iId = o.colonnes.indexOf(o.colonneId);
   const exclus = o.lignes.filter((l) => etat.estExclu(l[iId])).length;
-  const etape = (ok: boolean, texte: string, cible?: 'validation' | 'alertes') =>
+  const etape = (ok: boolean, texte: string, cible?: 'correction' | 'alerte') =>
     h(
       'li',
       { class: ok ? 'ok' : 'ko' },
       h('span', { class: 'marque', 'aria-hidden': 'true' }, ok ? '✓' : '✗'),
       texte,
-      !ok && cible && h('button', { type: 'button', class: 'lien', onclick: () => aller(cible) }, ' Y aller'),
+      !ok && cible && h('button', { type: 'button', class: 'lien', onclick: () => allerValidation(cible) }, ' Y aller'),
     );
   return [
     h('h1', null, 'Export'),
@@ -73,8 +74,8 @@ export function ecranExport() {
       h(
         'ul',
         { class: 'conditions' },
-        etape(b.correctionsEnAttente === 0, b.correctionsEnAttente ? `${b.correctionsEnAttente} correction(s) en attente de validation` : 'Aucune correction en attente', 'validation'),
-        etape(b.alertesSansDecision === 0, b.alertesSansDecision ? `${b.alertesSansDecision} alerte(s) sans décision` : 'Toutes les alertes ont une décision', 'alertes'),
+        etape(b.correctionsEnAttente === 0, b.correctionsEnAttente ? `${b.correctionsEnAttente} correction(s) en attente de validation` : 'Aucune correction en attente', 'correction'),
+        etape(b.alertesSansDecision === 0, b.alertesSansDecision ? `${b.alertesSansDecision} alerte(s) sans décision` : 'Toutes les alertes ont une décision', 'alerte'),
         etape(peut('responsable'), peut('responsable') ? 'Vous êtes responsable de la liste' : 'Seul un responsable peut exporter'),
       ),
       h('p', null, `${o.lignes.length} ménages dans l’original, ${o.lignes.length - exclus} inclus, ${exclus} exclu(s).`),
@@ -122,7 +123,7 @@ export function ecranExport() {
                 h('td', null, String(e.n)),
                 h('td', { class: 'nowrap' }, dateLisible(e.le)),
                 h('td', null, nomAuteur(e.auteur)),
-                h('td', null, e.contenu.nomFichier, ' ', badge(e.contenu.nature === 'liste' ? 'liste' : 'rapport')),
+                h('td', null, e.contenu.nomFichier, ' ', badge(LIBELLES_NATURE[e.contenu.nature].toLowerCase())),
                 h('td', null, h('code', { title: e.contenu.empreinteFichier }, e.contenu.empreinteFichier.slice(0, 12) + '…')),
               ),
             ),

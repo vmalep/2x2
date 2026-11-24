@@ -1,9 +1,13 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Plugin } from 'vite';
 import { defineConfig } from 'vitest/config';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+
+const VERSION: string = JSON.parse(readFileSync('package.json', 'utf8')).version;
+/** Nom du fichier livré : la version y figure pour savoir laquelle circule. */
+export const NOM_FICHIER = `2x2-v${VERSION}.html`;
 
 /**
  * Ajoute une Content-Security-Policy stricte au fichier HTML final.
@@ -48,6 +52,7 @@ function cspStricte(): Plugin {
         ].join('; ');
         html = html.replace('<head>', `<head>\n<meta http-equiv="Content-Security-Policy" content="${politique}">`);
         writeFileSync(chemin, html);
+        if (fichier.fileName === 'index.html') renameSync(chemin, join(options.dir ?? 'dist', NOM_FICHIER));
       }
     },
   };
@@ -55,6 +60,7 @@ function cspStricte(): Plugin {
 
 export default defineConfig({
   base: './',
+  define: { __VERSION__: JSON.stringify(VERSION) },
   plugins: [viteSingleFile({ removeViteModuleLoader: true }), cspStricte()],
   build: {
     target: 'es2022',

@@ -5,7 +5,7 @@
 import type { IdentiteDeverrouillee } from '../crypto/cles.ts';
 import type { Octets } from '../crypto/encodage.ts';
 import { sha256Hex } from '../crypto/empreinte.ts';
-import { LIBELLES_CONTROLES, type Alerte } from '../controles/controles.ts';
+import type { Alerte } from '../controles/controles.ts';
 import { ecrireCsv } from '../io/csv.ts';
 import { ecrireOds } from '../io/ods.ts';
 import type { Tableau } from '../io/tableau.ts';
@@ -14,6 +14,13 @@ import { journaliserExport, type Etat } from './journal.ts';
 import { CHAMP_STATUT, DECISIONS_ALERTE, type ContenuExport, type Liste } from './types.ts';
 
 export type Nature = ContenuExport['nature'];
+
+export const LIBELLES_NATURE: Record<Nature, string> = {
+  liste: 'Liste finale',
+  rapport: 'Rapport des alertes et des corrections',
+  visite: 'Liste de visite terrain',
+  kobo: 'Préchargement Kobo (revisite)',
+};
 export type FormatExport = ContenuExport['format'];
 
 export interface Blocage {
@@ -53,13 +60,12 @@ export function tableauListeFinale(etat: Etat): Tableau {
 
 export function tableauAlertes(etat: Etat, alertes: Alerte[]): Tableau {
   return {
-    colonnes: ['Alerte', 'Catégorie', 'Contrôle', 'Ménages', 'Constat', 'Décision', 'Décidée par', 'Le', 'Commentaire', 'Décision équipe (à remplir)', 'Commentaire équipe'],
+    colonnes: ['Alerte', 'Contrôle', 'Ménages', 'Constat', 'Décision', 'Décidée par', 'Le', 'Commentaire', 'Décision équipe (à remplir)', 'Commentaire équipe'],
     lignes: alertes.map((a) => {
       const d = etat.decisionsAlertes.get(a.id);
       return [
         a.id,
-        a.categorie === 'protection' ? 'Protection' : 'Intégrité',
-        LIBELLES_CONTROLES[a.controle],
+        a.libelle,
         a.menages.join(', '),
         a.message,
         d ? DECISIONS_ALERTE[d.contenu.categorie][d.contenu.decision] : '',
@@ -97,7 +103,7 @@ export function tableauCorrections(etat: Etat): Tableau {
   };
 }
 
-function tableauMetadonnees(liste: Liste, etat: Etat, nature: Nature, auteur: string, le: string): Tableau {
+export function tableauMetadonnees(liste: Liste, etat: Etat, nature: Nature, auteur: string, le: string): Tableau {
   const derniere = liste.journal.at(-1)!;
   const ids = idsMenages(etat);
   const exclus = ids.filter((id) => etat.estExclu(id)).length;
@@ -105,7 +111,7 @@ function tableauMetadonnees(liste: Liste, etat: Etat, nature: Nature, auteur: st
     colonnes: ['Élément', 'Valeur'],
     lignes: [
       ['Outil', '2x2 (prototype, données fictives uniquement)'],
-      ['Nature', nature === 'liste' ? 'Liste finale' : 'Rapport des alertes et des corrections'],
+      ['Nature', LIBELLES_NATURE[nature]],
       ['Fichier d’origine', liste.original.nomFichier],
       ['Empreinte SHA-256 du fichier d’origine', liste.original.empreinteFichier],
       ['Ménages : origine / inclus / exclus', `${ids.length} / ${ids.length - exclus} / ${exclus}`],
@@ -118,7 +124,7 @@ function tableauMetadonnees(liste: Liste, etat: Etat, nature: Nature, auteur: st
   };
 }
 
-const LARGEURS_META = [42, 70];
+export const LARGEURS_META = [42, 70];
 
 export interface FichierExporte {
   nomFichier: string;
@@ -148,7 +154,7 @@ export async function construireExport(
   } else {
     if (format === 'csv') throw new Error('Le rapport des alertes est disponible en XLSX ou ODS.');
     feuilles = [
-      { nom: 'Alertes', tableau: tableauAlertes(etat, alertes), largeurs: [30, 11, 26, 22, 60, 26, 18, 20, 40, 26, 40] },
+      { nom: 'Alertes', tableau: tableauAlertes(etat, alertes), largeurs: [30, 26, 22, 60, 26, 18, 20, 40, 26, 40] },
       { nom: 'Corrections', tableau: tableauCorrections(etat) },
       meta,
     ];

@@ -28,7 +28,11 @@ describe('Générateur de données fictives', () => {
     for (const id of d.verite.entretien_court) expect(duree(ligne(id))).toBeLessThan(6);
     const normaux = d.tableau.lignes.filter((l) => !Object.values(d.verite).flat().includes(l[col('id_menage')]));
     expect(normaux.every((l) => duree(l) >= 6)).toBe(true);
-    for (const id of d.verite.enfant_non_accompagne) expect(ligne(id)[col('enfant_non_accompagne')]).toBe('oui');
+    const pieces = d.verite.doublon_identifiant;
+    const norm = (x: string) => x.replace(/[^A-Z0-9]/gi, '');
+    for (let k = 0; k < pieces.length; k += 2) {
+      expect(norm(ligne(pieces[k])[col('numero_piece_identite')])).toBe(norm(ligne(pieces[k + 1])[col('numero_piece_identite')]));
+    }
     const tel = d.verite.doublon_telephone;
     for (let k = 0; k < tel.length; k += 2) expect(ligne(tel[k])[col('telephone')]).toBe(ligne(tel[k + 1])[col('telephone')]);
     const noms = d.verite.doublon_nom;
