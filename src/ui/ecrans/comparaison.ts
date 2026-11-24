@@ -147,7 +147,8 @@ export function ecranComparaison() {
   function majGroupe() {
     const p = choix.parMenage;
     const changements = menages.filter((m) => /^(exclure|reintegrer):/.test(p.get(m) ?? ''));
-    if (alerte && !alerteForcee) choixAlerte.value = decisionDeduite(menages, p, (m) => etat!.estExclu(m));
+    // Seule une personne qui peut décider des alertes se voit proposer une décision d'alerte.
+    if (alerte && peutDecider() && !alerteForcee) choixAlerte.value = decisionDeduite(menages, p, (m) => etat!.estExclu(m));
     const parts: string[] = [];
     for (const m of changements) {
       const [quoi, motif] = p.get(m)!.split(':');
@@ -228,7 +229,8 @@ export function ecranComparaison() {
     { class: 'barre-groupe statique decision-groupe' },
     h('strong', null, 'Décision sur ce groupe'),
     resume,
-    h('div', { class: 'actions' }, alerte && h('label', { class: 'discret' }, 'Alerte : ', choixAlerte), commentaire, boutonSigner),
+    h('div', { class: 'actions' }, alerte && peutDecider() && h('label', { class: 'discret' }, 'Alerte : ', choixAlerte), commentaire, boutonSigner),
+    alerte && !peutDecider() && h('p', { class: 'aide' }, 'La décision sur l’alerte revient à une personne en validation ou responsable : vos changements de statut lui seront soumis.'),
   );
 
   dessiner();

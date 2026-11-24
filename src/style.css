@@ -478,3 +478,6 @@ textarea { resize: vertical; }
 .liens-menage { margin: .5rem 0; padding: .55rem .75rem; border: 1px solid var(--bord); border-left: 4px solid var(--violet, #5b3a8c); border-radius: var(--rayon); background: var(--violet-pale, #f1ecf8); }
 .liens-menage .ligne { margin-top: .2rem; }
 .liens-menage del { color: var(--discret); }
+/* Plan ouvert : le tableau ne garde que ses titres et ses filtres. */
+.cadre-menages.filtres-seuls .defilement.tableau-menages { height: auto; overflow-x: auto; overflow-y: visible; }
+.cadre-menages.filtres-seuls tbody { display: none; }

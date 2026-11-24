@@ -256,7 +256,7 @@ export function genererDonneesFictives(options: OptionsFictif = {}): DonneesFict
 }
 
 /** Centres fictifs des villages (zone inventée), espacés de plusieurs kilomètres. */
-const CENTRES: Record<string, [number, number]> = {
+export const CENTRES: Record<string, [number, number]> = {
   'Village N-Rivière': [-4.18, 18.3],
   'Village N-Mission': [-4.16, 18.36],
   'Village N-Plateau': [-4.13, 18.31],
