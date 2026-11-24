@@ -362,12 +362,13 @@ export function ecranCorrection() {
     ? bouton(planOuvert ? 'Afficher la liste' : 'Plan GPS', () => {
         planOuvert = !planOuvert;
         zonePlan.hidden = !planOuvert;
-        zoneTable.hidden = !planOuvert ? false : true;
+        // Avec le plan, le tableau se réduit à ses en-têtes et filtres : on filtre ce que montre le plan.
+        zoneTable.classList.toggle('filtres-seuls', planOuvert);
         boutonPlan!.textContent = planOuvert ? 'Afficher la liste' : 'Plan GPS';
         dessinerTable();
       })
     : null;
-  if (planOuvert && colonneGps()) zoneTable.hidden = true;
+  if (planOuvert && colonneGps()) zoneTable.classList.add('filtres-seuls');
 
   const thead = h(
     'thead',
@@ -808,8 +809,8 @@ export function ecranCorrection() {
     barre?.panneau,
     visite?.panneau,
     retours?.panneau,
-    zonePlan,
     zoneTable,
+    zonePlan,
     separateur,
     zoneFiche,
   ];

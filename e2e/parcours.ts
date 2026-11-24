@@ -281,7 +281,7 @@ try {
 
   console.log('Plan GPS et fond de carte hors ligne');
   await page.getByRole('button', { name: 'Plan GPS' }).click();
-  verifier(!(await page.locator('.tableau.menages').isVisible()), 'le plan prend la place du tableau');
+  verifier(!(await page.locator('.tableau.menages tbody').isVisible()) && (await page.getByLabel('Filtrer Alertes', { exact: true }).isVisible()), 'le plan prend la place des lignes du tableau, les filtres restent visibles');
   const cadrePlan = (await page.locator('.zone-plan .plan').boundingBox())!;
   const vb = (await page.locator('.zone-plan .plan-svg').getAttribute('viewBox'))!.split(' ').map(Number);
   verifier(Math.abs(vb[2] - cadrePlan.width) < 3 && Math.abs(vb[3] - cadrePlan.height) < 3, `plan à la taille de son cadre, sans étirement (${Math.round(cadrePlan.width)}×${Math.round(cadrePlan.height)})`);
