@@ -6,13 +6,14 @@ import { calculerAlertes, type Alerte } from '../../controles/controles.ts';
 import { exporterRegles, importerRegles, type FormatRegles, type ReglesImportees } from '../../controles/fichier-regles.ts';
 import { detecterColonneGps, pointDepuis, type Point } from '../../controles/geo.ts';
 import { detecterColonnes } from '../../controles/parametres.ts';
-import { detecterColonneLien, detecterColonneLienRetour, reglesParDefaut, TYPES_REGLES, type Regle } from '../../controles/regles.ts';
+import { aideType, detecterColonneLien, detecterColonneLienRetour, libelleType, reglesParDefaut, TYPES_REGLES, type Regle } from '../../controles/regles.ts';
 import { cellule, corriger, deciderAlerte, signerRegles } from '../../model/journal.ts';
-import { CHAMP_STATUT, DECISIONS_ALERTE, MOTIFS_CORRECTION, MOTIFS_EXCLUSION, type ContenuRegles, type Motif } from '../../model/types.ts';
+import { CHAMP_STATUT, DECISIONS_ALERTE, MOTIFS_CORRECTION, MOTIFS_EXCLUSION, libelleMotif, type ContenuRegles, type Motif } from '../../model/types.ts';
 import { badge, bouton, encadre } from '../composants.ts';
 import { dateLisible, h } from '../dom.ts';
 import { choisirFichier, telecharger } from '../fichiers.ts';
 import { apresModification, nomAuteur, notifier, occupe, peut, rafraichir, session } from '../session.ts';
+import { t } from '../../i18n/index.ts';
 
 /** Colonne de l'enquêteur : celle de la règle part_enqueteur active, sinon détection automatique. */
 let colonneEnqueteurCache: { cle: unknown[]; colonne: string } | null = null;
@@ -113,11 +114,11 @@ export function formulaireDecision(a: Alerte, menage?: string) {
   const statutBloque = menage ? etat.estExclu(menage) || etat.enAttenteParCellule.has(cellule(menage, CHAMP_STATUT)) : true;
   const colonnes = menage ? etat.original.colonnes.filter((c) => c !== etat.original.colonneId && !etat.enAttenteParCellule.has(cellule(menage, c))) : [];
 
-  const commentaire = h('input', { type: 'text', placeholder: 'Commentaire', 'aria-label': 'Commentaire' });
+  const commentaire = h('input', { type: 'text', placeholder: t('commun.commentaire'), 'aria-label': t('commun.commentaire') });
   // Sous-formulaire « corriger une valeur » : champ, nouvelle valeur, motif.
-  const champ = h('select', { 'aria-label': 'Champ à corriger' }, h('option', { value: '' }, '— Champ à corriger —'), colonnes.map((c) => h('option', { value: c }, c)));
-  const valeur = h('input', { type: 'text', placeholder: 'Nouvelle valeur', 'aria-label': 'Nouvelle valeur' });
-  const motifCorrection = h('select', { 'aria-label': 'Motif de la correction' }, MOTIFS_CORRECTION.map((m) => h('option', { value: m }, m)));
+  const champ = h('select', { 'aria-label': t('alertes.champ_a_corriger') }, h('option', { value: '' }, t('alertes.choix_champ')), colonnes.map((c) => h('option', { value: c }, c)));
+  const valeur = h('input', { type: 'text', placeholder: t('commun.nouvelle_valeur'), 'aria-label': t('commun.nouvelle_valeur') });
+  const motifCorrection = h('select', { 'aria-label': t('alertes.motif_correction') }, MOTIFS_CORRECTION.map((m) => h('option', { value: m }, libelleMotif(m))));
   champ.addEventListener('change', () => {
     valeur.value = champ.value && menage ? (etat.valeur(menage, champ.value) ?? '') : '';
     valeur.focus();
@@ -126,8 +127,8 @@ export function formulaireDecision(a: Alerte, menage?: string) {
 
   const choix = h(
     'select',
-    { 'aria-label': 'Décision' },
-    h('option', { value: '' }, '— Décision —'),
+    { 'aria-label': t('alertes.decision') },
+    h('option', { value: '' }, t('commun.choix_decision')),
     Object.entries(options).map(([v, l]) => h('option', { value: v }, l)),
     menage &&
       peutCorriger &&
@@ -135,34 +136,34 @@ export function formulaireDecision(a: Alerte, menage?: string) {
         !statutBloque &&
           h(
             'optgroup',
-            { label: `${options.confirmee} et exclure ce ménage` },
-            MOTIFS_EXCLUSION.map((m) => h('option', { value: `exclure:${m}` }, `Exclure : ${m}`)),
+            { label: t('alertes.et_exclure', { decision: options.confirmee }) },
+            MOTIFS_EXCLUSION.map((m) => h('option', { value: `exclure:${m}` }, t('alertes.exclure_motif', { motif: libelleMotif(m) }))),
           ),
-        colonnes.length > 0 && h('optgroup', { label: `${options.confirmee} et corriger` }, h('option', { value: 'corriger' }, 'Corriger une valeur…')),
+        colonnes.length > 0 && h('optgroup', { label: t('alertes.et_corriger', { decision: options.confirmee }) }, h('option', { value: 'corriger' }, t('alertes.corriger_valeur'))),
       ],
   );
   const majChoix = () => {
     zoneCorrection.hidden = choix.value !== 'corriger';
     const motive = choix.value !== 'verification_terrain' && choix.value !== '';
-    commentaire.placeholder = motive ? 'Commentaire obligatoire : sur quoi repose cette décision ?' : 'Commentaire';
+    commentaire.placeholder = motive ? t('commun.commentaire_obligatoire') : t('commun.commentaire');
   };
   choix.addEventListener('change', majChoix);
 
   const signer = () => {
     const v = choix.value;
-    if (!v) return notifier('Choisissez une décision.', 'erreur');
+    if (!v) return notifier(t('commun.choisir_decision'), 'erreur');
     if (v !== 'verification_terrain' && !commentaire.value.trim()) {
       commentaire.focus();
-      return notifier('Cette décision doit être motivée par un commentaire.', 'erreur');
+      return notifier(t('commun.decision_motivee'), 'erreur');
     }
     const exclusion = v.startsWith('exclure:') ? v.slice('exclure:'.length) : '';
     if (v === 'corriger') {
-      if (!champ.value) return notifier('Choisissez le champ à corriger.', 'erreur');
-      if (valeur.value === (etat.valeur(menage!, champ.value) ?? '')) return notifier('La nouvelle valeur est identique à la valeur actuelle.', 'erreur');
+      if (!champ.value) return notifier(t('alertes.choisir_champ'), 'erreur');
+      if (valeur.value === (etat.valeur(menage!, champ.value) ?? '')) return notifier(t('alertes.identique'), 'erreur');
     }
     const decision = exclusion || v === 'corriger' ? 'confirmee' : v;
     const texte = commentaire.value.trim();
-    occupe('Signature…', async () => {
+    occupe(t('commun.signature'), async () => {
       await deciderAlerte(session.liste!, etat, session.identite!, { alerte: a.id, categorie: a.categorie, menages: a.menages, decision, commentaire: texte });
       session.decisionsDepuisRecu++;
       if (exclusion) {
@@ -186,10 +187,10 @@ export function formulaireDecision(a: Alerte, menage?: string) {
       }
       notifier(
         exclusion
-          ? 'Décision signée et exclusion proposée : elle attend la validation d’une autre personne.'
+          ? t('alertes.signee_exclusion')
           : v === 'corriger'
-            ? 'Décision signée et correction proposée : elle attend la validation d’une autre personne.'
-            : 'Décision signée et journalisée.',
+            ? t('alertes.signee_correction')
+            : t('alertes.signee'),
         'succes',
       );
       await apresModification();
@@ -198,7 +199,7 @@ export function formulaireDecision(a: Alerte, menage?: string) {
   return h(
     'div',
     { class: 'formulaire-decision' },
-    h('div', { class: 'actions' }, choix, commentaire, bouton(d ? 'Réviser la décision' : 'Signer la décision', signer, d ? 'secondaire' : 'principal')),
+    h('div', { class: 'actions' }, choix, commentaire, bouton(d ? t('alertes.reviser') : t('alertes.signer_decision'), signer, d ? 'secondaire' : 'principal')),
     zoneCorrection,
   );
 }
@@ -218,7 +219,7 @@ function tableauRegles(regles: Regle[], alertes?: Alerte[]) {
       h(
         'thead',
         null,
-        h('tr', null, ['Actif', 'Nom', 'Libellé', 'Type', 'Colonne(s)', 'Min', 'Max', 'Liste', alertes ? 'Alertes' : ''].map((t) => h('th', null, t))),
+        h('tr', null, [t('regles.col_actif'), t('import.col_nom'), t('regles.col_libelle'), t('journal.type'), t('regles.col_colonnes'), 'Min', 'Max', t('regles.col_liste'), alertes ? t('regles.col_alertes') : ''].map((t) => h('th', null, t))),
       ),
       h(
         'tbody',
@@ -230,7 +231,7 @@ function tableauRegles(regles: Regle[], alertes?: Alerte[]) {
             h('td', null, r.actif ? '✓' : '—'),
             h('td', null, h('code', null, r.nom)),
             h('td', null, r.libelle),
-            h('td', { title: TYPES_REGLES[r.type]?.aide ?? '' }, TYPES_REGLES[r.type]?.libelle ?? r.type),
+            h('td', { title: r.type in TYPES_REGLES ? aideType(r.type) : '' }, r.type in TYPES_REGLES ? libelleType(r.type) : r.type),
             h('td', null, [r.colonne, r.colonne2].filter(Boolean).join(' → ')),
             h('td', null, r.min),
             h('td', null, r.max),
@@ -250,21 +251,21 @@ export function carteRegles(alertes: Alerte[]) {
   const responsable = peut('responsable');
   const signe = etat.regles;
   const exporter = (format: FormatRegles) =>
-    occupe('Préparation du fichier de règles…', async () => {
+    occupe(t('regles.preparation'), async () => {
       const f = await exporterRegles(regles, colonnes, format);
       telecharger(`regles_2x2.${format}`, f.octets, f.type);
     });
   const importer = async () => {
     const f = await choisirFichier('.xlsx,.ods,.csv');
     if (!f) return;
-    await occupe('Lecture du fichier de règles…', async () => {
+    await occupe(t('regles.lecture'), async () => {
       apercu = await importerRegles(f.octets, f.nom, colonnes);
       regleOuverte = true;
       rafraichir();
     });
   };
   const signer = (nouvelles: Regle[], source: ContenuRegles['source'], message: string) =>
-    occupe('Signature des règles…', async () => {
+    occupe(t('regles.signature'), async () => {
       await signerRegles(session.liste!, etat, session.identite!, { regles: nouvelles, source });
       apercu = undefined;
       notifier(message, 'succes');
@@ -277,37 +278,37 @@ export function carteRegles(alertes: Alerte[]) {
     h(
       'summary',
       { onclick: () => (regleOuverte = !regleOuverte) },
-      h('strong', null, 'Règles de contrôle'),
-      badge(`${regles.filter((r) => r.actif).length} active(s)`, 'neutre'),
-      signe ? badge('signées au journal', 'ok') : etat.parametres ? badge('anciens paramètres', 'neutre') : badge('règles par défaut', 'neutre'),
+      h('strong', null, t('regles.titre')),
+      badge(t('regles.actives', { n: regles.filter((r) => r.actif).length }), 'neutre'),
+      signe ? badge(t('regles.signees'), 'ok') : etat.parametres ? badge(t('regles.anciens'), 'neutre') : badge(t('regles.defaut'), 'neutre'),
     ),
     h(
       'p',
       { class: 'aide' },
       signe
-        ? `Jeu de règles signé par ${nomAuteur(signe.auteur)} le ${dateLisible(signe.le)}${signe.contenu.source ? `, depuis le fichier « ${signe.contenu.source.nomFichier} »` : ''}.`
-        : 'Règles proposées automatiquement d’après les colonnes de l’export. ',
-      ' Pour les modifier : exportez-les, éditez le fichier dans un tableur (une règle par ligne, voir la feuille « Aide »), puis importez-le. Chaque import est signé au journal.',
+        ? t(signe.contenu.source ? 'regles.signe_fichier' : 'regles.signe', { nom: nomAuteur(signe.auteur), date: dateLisible(signe.le), fichier: signe.contenu.source?.nomFichier ?? '' })
+        : t('regles.auto'),
+      ' ' + t('regles.modifier'),
     ),
     tableauRegles(regles, alertes),
     h(
       'div',
       { class: 'ligne' },
-      bouton('Exporter (XLSX)', () => exporter('xlsx')),
-      bouton('Exporter (ODS)', () => exporter('ods')),
-      bouton('Exporter (CSV)', () => exporter('csv')),
-      responsable && bouton('Importer un fichier de règles…', importer, 'principal'),
+      bouton(t('regles.exporter_xlsx'), () => exporter('xlsx')),
+      bouton(t('regles.exporter_ods'), () => exporter('ods')),
+      bouton(t('regles.exporter_csv'), () => exporter('csv')),
+      responsable && bouton(t('regles.importer'), importer, 'principal'),
     ),
-    !responsable && h('p', { class: 'aide' }, 'Seul un responsable peut importer de nouvelles règles.'),
+    !responsable && h('p', { class: 'aide' }, t('regles.seul_responsable')),
     apercu &&
       h(
         'div',
         { class: 'apercu-regles' },
-        h('h3', null, `Aperçu : ${apercu.nomFichier}`),
+        h('h3', null, t('regles.apercu', { fichier: apercu.nomFichier })),
         apercu.erreurs.length
           ? encadre(
               'erreur',
-              h('strong', null, `Fichier refusé : ${apercu.erreurs.length} problème(s). Corrigez le fichier puis importez-le à nouveau.`),
+              h('strong', null, t('regles.refuse', { n: apercu.erreurs.length })),
               h('ul', null, apercu.erreurs.map((e) => h('li', null, e))),
             )
           : [
@@ -316,8 +317,7 @@ export function carteRegles(alertes: Alerte[]) {
                 const nouvellesAlertes = calculerAlertes(etat, apercu.regles);
                 return encadre(
                   'info',
-                  `Avec ces règles : ${nouvellesAlertes.length} alerte(s), contre ${alertes.length} actuellement. `,
-                  'Les décisions déjà prises restent rattachées aux règles qui gardent le même nom.',
+                  t('regles.effet', { n: nouvellesAlertes.length, actuel: alertes.length }),
                 );
               })(),
             ],
@@ -325,11 +325,11 @@ export function carteRegles(alertes: Alerte[]) {
           'div',
           { class: 'ligne' },
           !apercu.erreurs.length &&
-            bouton('Signer ces règles', () => {
+            bouton(t('regles.signer'), () => {
               const a = apercu!;
-              signer(a.regles, { nomFichier: a.nomFichier, empreinteFichier: a.empreinteFichier }, `Règles signées (${a.regles.length}). Les alertes ont été recalculées.`);
+              signer(a.regles, { nomFichier: a.nomFichier, empreinteFichier: a.empreinteFichier }, t('regles.signees_notif', { n: a.regles.length }));
             }, 'principal'),
-          bouton('Annuler', () => {
+          bouton(t('commun.annuler'), () => {
             apercu = undefined;
             rafraichir();
           }),
@@ -340,9 +340,9 @@ export function carteRegles(alertes: Alerte[]) {
       h(
         'div',
         { class: 'ligne' },
-        bouton('Revenir aux règles par défaut', () => {
-          if (!confirm('Remplacer les règles actuelles par les règles par défaut ? Ce changement sera signé au journal.')) return;
-          signer(reglesParDefaut(colonnes, session.liste!.original.lignes), null, 'Règles par défaut signées.');
+        bouton(t('regles.revenir'), () => {
+          if (!confirm(t('regles.revenir_confirmer'))) return;
+          signer(reglesParDefaut(colonnes, session.liste!.original.lignes), null, t('regles.defaut_signees'));
         }),
       ),
   );

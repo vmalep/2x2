@@ -6,6 +6,7 @@
 import { distance, formatDistance, type Point } from '../controles/geo.ts';
 import type { ElementFond, FondVectoriel } from '../io/geojson.ts';
 import { fondCarte, surChangementFond } from './fond.ts';
+import { t } from '../i18n/index.ts';
 
 export interface PointPlan {
   id: string;
@@ -78,7 +79,7 @@ export function plan(points: PointPlan[], options: OptionsPlan = {}): HTMLElemen
   // Taille réelle du cadre (mise à jour quand il change) : le dessin n'est jamais étiré.
   let LARGEUR = 900;
   let H = options.hauteur ?? 360;
-  const racine = svg('svg', { viewBox: `0 0 ${LARGEUR} ${H}`, class: 'plan-svg', role: 'img', 'aria-label': `Plan de ${points.length} point(s) GPS` });
+  const racine = svg('svg', { viewBox: `0 0 ${LARGEUR} ${H}`, class: 'plan-svg', role: 'img', 'aria-label': t('plan.titre', { n: points.length }) });
   const conteneur = document.createElement('div');
   conteneur.className = 'plan';
   // Hauteur par défaut si le cadre n'en impose pas (CSSOM : autorisé par la politique de sécurité).
@@ -87,7 +88,7 @@ export function plan(points: PointPlan[], options: OptionsPlan = {}): HTMLElemen
 
   if (!points.length) {
     conteneur.classList.add('vide');
-    conteneur.textContent = 'Aucune coordonnée GPS pour ces ménages.';
+    conteneur.textContent = t('plan.aucun');
     return conteneur;
   }
 
@@ -275,9 +276,9 @@ export function plan(points: PointPlan[], options: OptionsPlan = {}): HTMLElemen
   const commandes = document.createElement('div');
   commandes.className = 'commandes-plan';
   for (const [texte, titre, action] of [
-    ['+', 'Zoomer', () => zoomer(1.6)],
-    ['−', 'Dézoomer', () => zoomer(1 / 1.6)],
-    ['⤢', 'Recentrer sur les points', () => ((vue = initiale()), (vueTouchee = false), dessiner())],
+    ['+', t('plan.zoomer'), () => zoomer(1.6)],
+    ['−', t('plan.dezoomer'), () => zoomer(1 / 1.6)],
+    ['⤢', t('plan.recentrer'), () => ((vue = initiale()), (vueTouchee = false), dessiner())],
   ] as const) {
     const b = document.createElement('button');
     b.type = 'button';

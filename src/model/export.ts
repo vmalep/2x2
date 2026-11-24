@@ -12,15 +12,16 @@ import type { Tableau } from '../io/tableau.ts';
 import { ecrireXlsx, type FeuilleXlsx } from '../io/xlsx.ts';
 import { journaliserExport, type Etat } from './journal.ts';
 import { CHAMP_STATUT, DECISIONS_ALERTE, type ContenuExport, type Liste } from './types.ts';
+import { libelles, t } from '../i18n/index.ts';
 
 export type Nature = ContenuExport['nature'];
 
-export const LIBELLES_NATURE: Record<Nature, string> = {
-  liste: 'Liste finale',
-  rapport: 'Rapport des alertes et des corrections',
-  visite: 'Liste de visite terrain',
-  kobo: 'Préchargement Kobo (revisite)',
-};
+export const LIBELLES_NATURE: Record<Nature, string> = libelles({
+  liste: 'nature.liste',
+  rapport: 'nature.rapport',
+  visite: 'nature.visite',
+  kobo: 'nature.kobo',
+});
 export type FormatExport = ContenuExport['format'];
 
 export interface Blocage {
@@ -152,7 +153,7 @@ export async function construireExport(
     }
     feuilles = [{ nom: 'Liste finale', tableau: tableauListeFinale(etat) }, meta];
   } else {
-    if (format === 'csv') throw new Error('Le rapport des alertes est disponible en XLSX ou ODS.');
+    if (format === 'csv') throw new Error(t('export.err_rapport_csv'));
     feuilles = [
       { nom: 'Alertes', tableau: tableauAlertes(etat, alertes), largeurs: [30, 26, 22, 60, 26, 18, 20, 40, 26, 40] },
       { nom: 'Corrections', tableau: tableauCorrections(etat) },
@@ -175,8 +176,8 @@ export async function exporter(
 ): Promise<FichierExporte> {
   // Le rapport des alertes est un document de travail : il reste exportable à tout moment.
   const b = nature === 'liste' ? blocages(etat, alertes) : { correctionsEnAttente: 0, alertesSansDecision: 0 };
-  if (b.correctionsEnAttente) throw new Error(`Export verrouillé : ${b.correctionsEnAttente} correction(s) en attente de validation.`);
-  if (b.alertesSansDecision) throw new Error(`Export verrouillé : ${b.alertesSansDecision} alerte(s) sans décision.`);
+  if (b.correctionsEnAttente) throw new Error(t('export.err_attente', { n: b.correctionsEnAttente }));
+  if (b.alertesSansDecision) throw new Error(t('export.err_alertes', { n: b.alertesSansDecision }));
   const derniere = liste.journal.at(-1)!;
   const fichier = await construireExport(liste, etat, alertes, nature, format, identite.nom);
   await journaliserExport(liste, etat, identite, {

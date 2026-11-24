@@ -1,48 +1,52 @@
 import { LIBELLES_NATURE } from '../../model/export.ts';
-import { CHAMP_STATUT, DECISIONS_ALERTE, type Entree } from '../../model/types.ts';
+import { CHAMP_STATUT, DECISIONS_ALERTE, LIBELLES_ROLES, libelleMotif, type Entree } from '../../model/types.ts';
 import { encadre } from '../composants.ts';
 import { carteConfronterRecu } from './recus.ts';
-import { dateLisible, h } from '../dom.ts';
+import { dateLisible, h, tr } from '../dom.ts';
 import { nomAuteur, session } from '../session.ts';
+import { libelles, t } from '../../i18n/index.ts';
 
 function resume(e: Entree): string {
   switch (e.type) {
     case 'ouverture':
-      return `Ouverture : ${e.contenu.original.nomFichier}, ${e.contenu.original.nombreLignes} ménages, ${e.contenu.utilisateurs.length} utilisateur(s)`;
+      return t('journal.r_ouverture', { fichier: e.contenu.original.nomFichier, menages: e.contenu.original.nombreLignes, n: e.contenu.utilisateurs.length });
     case 'utilisateur':
-      return `Déclaration de ${e.contenu.utilisateur.nom} (${e.contenu.utilisateur.roles.join(', ')})`;
+      return t('journal.r_utilisateur', { nom: e.contenu.utilisateur.nom, roles: e.contenu.utilisateur.roles.map((r) => LIBELLES_ROLES[r] ?? r).join(', ') });
     case 'correction':
       return e.contenu.champ === CHAMP_STATUT
-        ? `${e.contenu.menage} · statut : ${e.contenu.ancienne} → ${e.contenu.nouvelle} (${e.contenu.motif})`
-        : `${e.contenu.menage} · ${e.contenu.champ} : « ${e.contenu.ancienne} » → « ${e.contenu.nouvelle} » (${e.contenu.motif})`;
+        ? t('journal.r_statut', { menage: e.contenu.menage, ancienne: libelleStatut(e.contenu.ancienne), nouvelle: libelleStatut(e.contenu.nouvelle), motif: libelleMotif(e.contenu.motif) })
+        : t('journal.r_correction', { menage: e.contenu.menage, champ: e.contenu.champ, ancienne: e.contenu.ancienne, nouvelle: e.contenu.nouvelle, motif: libelleMotif(e.contenu.motif) });
     case 'decision':
-      return `Correction n° ${e.contenu.correction} ${e.contenu.decision === 'acceptee' ? 'acceptée' : 'refusée'}${e.contenu.commentaire ? ` : « ${e.contenu.commentaire} »` : ''}`;
+      return t(e.contenu.decision === 'acceptee' ? 'journal.r_acceptee' : 'journal.r_refusee', { n: e.contenu.correction }) + (e.contenu.commentaire ? t('journal.r_commentaire', { texte: e.contenu.commentaire }) : '');
     case 'parametres':
-      return `Paramètres des contrôles : seuil de durée ${e.contenu.parametres.seuilDureeMinutes} min, durée max. ${e.contenu.parametres.dureeMaxHeures} h`;
+      return t('journal.r_parametres', { min: e.contenu.parametres.seuilDureeMinutes, max: e.contenu.parametres.dureeMaxHeures });
     case 'regles': {
       const actives = e.contenu.regles.filter((r) => r.actif).length;
-      return `Règles de contrôle : ${actives} active(s) sur ${e.contenu.regles.length}${e.contenu.source ? `, fichier ${e.contenu.source.nomFichier}` : ''}`;
+      return t('journal.r_regles', { n: actives, total: e.contenu.regles.length }) + (e.contenu.source ? t('journal.r_regles_fichier', { fichier: e.contenu.source.nomFichier }) : '');
     }
     case 'decision_alerte': {
       const controle = e.contenu.alerte.split(':')[0];
       const regle = session.etat?.reglesCourantes().find((r) => r.nom === controle);
-      return `${regle?.libelle ?? controle} (${e.contenu.menages.join(', ')}) : ${DECISIONS_ALERTE[e.contenu.categorie]?.[e.contenu.decision] ?? e.contenu.decision}${e.contenu.commentaire ? ` · « ${e.contenu.commentaire} »` : ''}`;
+      return t('journal.r_decision_alerte', { regle: regle?.libelle ?? controle, menages: e.contenu.menages.join(', '), decision: DECISIONS_ALERTE[e.contenu.categorie]?.[e.contenu.decision] ?? e.contenu.decision }) + (e.contenu.commentaire ? t('journal.r_commentaire_alerte', { texte: e.contenu.commentaire }) : '');
     }
     case 'export':
-      return `Export : ${LIBELLES_NATURE[e.contenu.nature].toLowerCase()} (${e.contenu.format.toUpperCase()}, ${e.contenu.menages} ligne(s)) : ${e.contenu.nomFichier}${e.contenu.colonnes?.length ? ` · données sorties : ${e.contenu.colonnes.join(', ')}` : ''}`;
+      return t('journal.r_export', { nature: LIBELLES_NATURE[e.contenu.nature].toLowerCase(), format: e.contenu.format.toUpperCase(), n: e.contenu.menages, fichier: e.contenu.nomFichier }) + (e.contenu.colonnes?.length ? t('journal.r_export_colonnes', { colonnes: e.contenu.colonnes.join(', ') }) : '');
   }
 }
 
-const TYPES: Record<Entree['type'], string> = {
-  ouverture: 'Ouverture',
-  utilisateur: 'Utilisateur',
-  correction: 'Correction',
-  decision: 'Validation',
-  parametres: 'Paramètres',
-  regles: 'Règles',
-  decision_alerte: 'Alerte',
-  export: 'Export',
-};
+/** Statut d'un ménage (code inclus / exclu du journal), tel qu'affiché. */
+const libelleStatut = (s: string) => (s === 'exclu' ? t('statut.exclu') : s === 'inclus' ? t('statut.inclus') : s);
+
+const TYPES: Record<Entree['type'], string> = libelles({
+  ouverture: 'journal.t_ouverture',
+  utilisateur: 'journal.t_utilisateur',
+  correction: 'journal.t_correction',
+  decision: 'journal.t_decision',
+  parametres: 'journal.t_parametres',
+  regles: 'journal.t_regles',
+  decision_alerte: 'journal.t_decision_alerte',
+  export: 'journal.t_export',
+});
 
 export function ecranJournal() {
   const v = session.verification!;
@@ -51,29 +55,28 @@ export function ecranJournal() {
   for (const e of v.erreurs) if (e.n !== null) erreursParLigne.set(e.n, [...(erreursParLigne.get(e.n) ?? []), e.message]);
   const derniere = journal.at(-1)!;
   return [
-    h('h1', null, 'Journal'),
+    h('h1', null, t('nav.journal')),
     v.valide
       ? encadre(
           'ok',
-          h('strong', null, `Journal intègre : ${journal.length} lignes vérifiées.`),
-          ' Chaîne d’empreintes continue, signatures valides, règles respectées.',
-          h('p', { class: 'aide' }, 'Dernière empreinte : ', h('code', null, derniere.empreinte)),
+          tr('journal.integre', { n: journal.length }),
+          h('p', { class: 'aide' }, tr('journal.derniere', { empreinte: derniere.empreinte })),
         )
       : encadre(
           'erreur',
-          h('strong', null, `Altérations détectées (${v.erreurs.length}). Le fichier est en lecture seule.`),
-          h('ul', null, v.erreurs.map((e) => h('li', null, e.n === null ? e.message : `Ligne ${e.n} : ${e.message}`))),
-          h('p', null, 'Ne poursuivez pas le travail sur ce fichier. Signalez-le au responsable et repartez de la dernière version saine.'),
+          h('strong', null, t('journal.alterations', { n: v.erreurs.length })),
+          h('ul', null, v.erreurs.map((e) => h('li', null, e.n === null ? e.message : t('journal.ligne_message', { n: e.n ?? '', message: e.message })))),
+          h('p', null, t('journal.ne_pas_poursuivre')),
         ),
     carteConfronterRecu(),
-    v.avertissements.length > 0 && encadre('alerte', h('ul', null, v.avertissements.map((e) => h('li', null, `Ligne ${e.n} : ${e.message}`)))),
+    v.avertissements.length > 0 && encadre('alerte', h('ul', null, v.avertissements.map((e) => h('li', null, t('journal.ligne_message', { n: e.n ?? '', message: e.message }))))),
     h(
       'div',
       { class: 'defilement' },
       h(
         'table',
         { class: 'tableau journal' },
-        h('thead', null, h('tr', null, h('th', null, 'N°'), h('th', null, 'Date'), h('th', null, 'Auteur'), h('th', null, 'Type'), h('th', null, 'Contenu'), h('th', null, 'Empreinte'))),
+        h('thead', null, h('tr', null, h('th', null, t('commun.numero')), h('th', null, t('commun.date')), h('th', null, t('journal.auteur')), h('th', null, t('journal.type')), h('th', null, t('import.contenu')), h('th', null, t('commun.empreinte')))),
         h(
           'tbody',
           null,
@@ -87,7 +90,7 @@ export function ecranJournal() {
               h('td', null, e.type === 'ouverture' ? e.contenu.utilisateurs.find((u) => u.empreinte === e.auteur)?.nom ?? '?' : nomAuteur(e.auteur)),
               h('td', null, TYPES[e.type] ?? e.type),
               h('td', null, resume(e), erreurs && h('div', { class: 'erreur-ligne' }, erreurs.join(' '))),
-              h('td', null, h('code', { title: `Empreinte : ${e.empreinte}\nPrécédente : ${e.precedente}` }, e.empreinte.slice(0, 12) + '…')),
+              h('td', null, h('code', { title: t('journal.empreintes', { empreinte: e.empreinte, precedente: e.precedente }) }, e.empreinte.slice(0, 12) + '…')),
             );
           }),
         ),

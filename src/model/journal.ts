@@ -28,6 +28,7 @@ import {
   type Role,
   type Utilisateur,
 } from './types.ts';
+import { langueCourante, t } from '../i18n/index.ts';
 
 export const EMPREINTE_INITIALE = '0'.repeat(64);
 
@@ -78,9 +79,13 @@ export class Etat {
     if (this.regles) return this.regles.contenu.regles;
     if (this.parametres) return reglesDepuisParametres(this.parametres);
     // L'original ne change jamais : les règles par défaut se calculent une seule fois.
-    return (this.reglesDefautCache ??= reglesParDefaut(this.original.colonnes, this.original.lignes));
+    // Leurs libellés suivent la langue de l'interface (leurs noms, donc les identifiants d'alerte, non).
+    if (this.reglesDefautCache?.langue !== langueCourante()) {
+      this.reglesDefautCache = { langue: langueCourante(), regles: reglesParDefaut(this.original.colonnes, this.original.lignes) };
+    }
+    return this.reglesDefautCache.regles;
   }
-  private reglesDefautCache?: Regle[];
+  private reglesDefautCache?: { langue: string; regles: Regle[] };
 
   estExclu(menage: string): boolean {
     return this.valeur(menage, CHAMP_STATUT) === 'exclu';
@@ -105,50 +110,50 @@ function appliquer(etat: Etat, e: EntreeNonSignee): string | undefined {
   const auteur = etat.utilisateurs.get(e.auteur);
   switch (e.type) {
     case 'ouverture': {
-      if (e.n !== 0) return 'Une ouverture ne peut être que la première ligne.';
+      if (e.n !== 0) return t('verif.ouverture_premiere');
       const resp = e.contenu.utilisateurs.find((u) => u.empreinte === e.auteur);
-      if (!resp?.roles.includes('responsable')) return 'L’ouverture doit être signée par un responsable déclaré.';
+      if (!resp?.roles.includes('responsable')) return t('verif.ouverture_responsable');
       for (const u of e.contenu.utilisateurs) {
-        if (etat.utilisateurs.has(u.empreinte)) return `Utilisateur déclaré deux fois : ${u.nom}.`;
+        if (etat.utilisateurs.has(u.empreinte)) return t('verif.deux_fois', { nom: u.nom });
         etat.utilisateurs.set(u.empreinte, u);
       }
       return undefined;
     }
     case 'utilisateur': {
-      if (!auteur?.roles.includes('responsable')) return 'Seul un responsable peut déclarer un utilisateur.';
+      if (!auteur?.roles.includes('responsable')) return t('verif.declarer');
       const u = e.contenu.utilisateur;
-      if (etat.utilisateurs.has(u.empreinte)) return `Cette clé est déjà déclarée (${etat.utilisateurs.get(u.empreinte)!.nom}).`;
+      if (etat.utilisateurs.has(u.empreinte)) return t('verif.deja_declaree', { nom: etat.utilisateurs.get(u.empreinte)!.nom });
       etat.utilisateurs.set(u.empreinte, u);
       return undefined;
     }
     case 'correction': {
       const c = e.contenu;
-      if (!auteur) return 'Auteur inconnu.';
-      if (!auteur.roles.includes('correction')) return `${auteur.nom} n’a pas le rôle « Correction ».`;
-      if (!etat.indexMenages.has(c.menage)) return `Ménage inconnu : ${c.menage}.`;
-      if (!etat.original.colonnes.includes(c.champ) && c.champ !== CHAMP_STATUT) return `Champ inconnu : ${c.champ}.`;
-      if (c.champ === CHAMP_STATUT && !(STATUTS as readonly string[]).includes(c.nouvelle)) return 'Statut non reconnu (inclus ou exclu).';
-      if (c.champ === etat.original.colonneId) return 'L’identifiant du ménage ne peut pas être corrigé.';
-      if (!(MOTIFS as readonly string[]).includes(c.motif)) return 'Motif absent ou non reconnu.';
-      if (c.motif.startsWith('Autre') && !c.commentaire.trim()) return 'Le motif « Autre » exige un commentaire.';
+      if (!auteur) return t('verif.auteur_inconnu');
+      if (!auteur.roles.includes('correction')) return t('verif.role_correction', { nom: auteur.nom });
+      if (!etat.indexMenages.has(c.menage)) return t('verif.menage', { menage: c.menage });
+      if (!etat.original.colonnes.includes(c.champ) && c.champ !== CHAMP_STATUT) return t('verif.champ', { champ: c.champ });
+      if (c.champ === CHAMP_STATUT && !(STATUTS as readonly string[]).includes(c.nouvelle)) return t('verif.statut');
+      if (c.champ === etat.original.colonneId) return t('verif.identifiant');
+      if (!(MOTIFS as readonly string[]).includes(c.motif)) return t('verif.motif');
+      if (c.motif.startsWith('Autre') && !c.commentaire.trim()) return t('verif.autre');
       const cle = cellule(c.menage, c.champ);
-      if (etat.enAttenteParCellule.has(cle)) return 'Une correction est déjà en attente de validation pour ce champ.';
-      if (etat.valeur(c.menage, c.champ) !== c.ancienne) return 'L’ancienne valeur ne correspond pas à la valeur actuelle.';
-      if (c.nouvelle === c.ancienne) return 'La nouvelle valeur est identique à l’ancienne.';
+      if (etat.enAttenteParCellule.has(cle)) return t('verif.deja_attente');
+      if (etat.valeur(c.menage, c.champ) !== c.ancienne) return t('verif.ancienne');
+      if (c.nouvelle === c.ancienne) return t('verif.identique');
       etat.corrections.set(e.n, { entree: e as CorrectionSuivie['entree'], statut: 'en_attente' });
       etat.enAttenteParCellule.set(cle, e.n);
       return undefined;
     }
     case 'decision': {
       const d = e.contenu;
-      if (!auteur) return 'Auteur inconnu.';
-      if (!auteur.roles.includes('validation')) return `${auteur.nom} n’a pas le rôle « Validation ».`;
+      if (!auteur) return t('verif.auteur_inconnu');
+      if (!auteur.roles.includes('validation')) return t('verif.role_validation', { nom: auteur.nom });
       const suivie = etat.corrections.get(d.correction);
-      if (!suivie) return `Correction n° ${d.correction} introuvable.`;
-      if (suivie.statut !== 'en_attente') return `La correction n° ${d.correction} a déjà été traitée.`;
-      if (suivie.entree.auteur === e.auteur) return 'Validation de sa propre correction : refusée (principe des quatre yeux).';
-      if (d.decision !== 'acceptee' && d.decision !== 'refusee') return 'Décision non reconnue.';
-      if (d.decision === 'refusee' && !d.commentaire.trim()) return 'Un refus doit être motivé par un commentaire.';
+      if (!suivie) return t('verif.correction', { n: d.correction });
+      if (suivie.statut !== 'en_attente') return t('verif.traitee', { n: d.correction });
+      if (suivie.entree.auteur === e.auteur) return t('verif.propre');
+      if (d.decision !== 'acceptee' && d.decision !== 'refusee') return t('verif.decision');
+      if (d.decision === 'refusee' && !d.commentaire.trim()) return t('verif.refus');
       suivie.statut = d.decision;
       suivie.decision = e as CorrectionSuivie['decision'];
       const c = suivie.entree.contenu;
@@ -161,51 +166,51 @@ function appliquer(etat: Etat, e: EntreeNonSignee): string | undefined {
       return undefined;
     }
     case 'parametres': {
-      if (!auteur?.roles.includes('responsable')) return 'Seul un responsable peut modifier les paramètres des contrôles.';
+      if (!auteur?.roles.includes('responsable')) return t('verif.parametres');
       const p = e.contenu.parametres;
       for (const c of Object.values(p.colonnes ?? {})) {
-        if (c !== undefined && !etat.original.colonnes.includes(c)) return `Colonne inconnue dans les paramètres : ${c}.`;
+        if (c !== undefined && !etat.original.colonnes.includes(c)) return t('verif.colonne_parametres', { colonne: c });
       }
       const nombres = [p.seuilDureeMinutes, p.dureeMaxHeures, p.partCourtsEnqueteur, p.minEntretiensEnqueteur, p.distanceNoms];
-      if (nombres.some((n) => typeof n !== 'number' || !Number.isFinite(n) || n < 0)) return 'Paramètre numérique invalide.';
+      if (nombres.some((n) => typeof n !== 'number' || !Number.isFinite(n) || n < 0)) return t('verif.parametre_nombre');
       etat.parametres = p;
       etat.regles = undefined;
       return undefined;
     }
     case 'regles': {
-      if (!auteur?.roles.includes('responsable')) return 'Seul un responsable peut modifier les règles de contrôle.';
-      if (!Array.isArray(e.contenu.regles)) return 'Jeu de règles illisible.';
+      if (!auteur?.roles.includes('responsable')) return t('verif.regles');
+      if (!Array.isArray(e.contenu.regles)) return t('verif.regles_illisibles');
       const erreurs = validerRegles(e.contenu.regles, etat.original.colonnes);
-      if (erreurs.length) return `Règles invalides : ${erreurs[0]}`;
+      if (erreurs.length) return t('verif.regles_invalides', { erreur: erreurs[0] });
       etat.regles = e as Entree & { type: 'regles' };
       return undefined;
     }
     case 'decision_alerte': {
       const d = e.contenu;
-      if (!auteur) return 'Auteur inconnu.';
+      if (!auteur) return t('verif.auteur_inconnu');
       if (!auteur.roles.includes('validation') && !auteur.roles.includes('responsable')) {
-        return `${auteur.nom} n’a ni le rôle « Validation » ni le rôle « Responsable ».`;
+        return t('verif.role_decider', { nom: auteur.nom });
       }
-      if (!DECISIONS_ALERTE[d.categorie]?.[d.decision]) return 'Décision d’alerte non reconnue.';
-      if (!d.alerte || !Array.isArray(d.menages)) return 'Alerte non identifiée.';
-      if (d.menages.some((m) => !etat.indexMenages.has(m))) return 'Ménage inconnu dans la décision d’alerte.';
+      if (!DECISIONS_ALERTE[d.categorie]?.[d.decision]) return t('verif.decision_alerte');
+      if (!d.alerte || !Array.isArray(d.menages)) return t('verif.alerte');
+      if (d.menages.some((m) => !etat.indexMenages.has(m))) return t('verif.menage_alerte');
       if (d.decision === 'confirmee' && !d.commentaire.trim()) {
-        return 'Une anomalie confirmée doit être motivée par un commentaire.';
+        return t('verif.confirmee');
       }
-      if (d.decision === 'faux_positif' && !d.commentaire.trim()) return 'Une alerte jugée sans problème doit être motivée par un commentaire.';
+      if (d.decision === 'faux_positif' && !d.commentaire.trim()) return t('verif.faux_positif');
       etat.decisionsAlertes.set(d.alerte, e as Entree & { type: 'decision_alerte' });
       return undefined;
     }
     case 'export': {
-      if (!auteur?.roles.includes('responsable')) return 'Seul un responsable peut exporter.';
+      if (!auteur?.roles.includes('responsable')) return t('verif.exporter');
       const x = e.contenu;
-      if (x.nature === 'liste' && etat.enAttente().length) return 'Export impossible : des corrections sont en attente de validation.';
-      if (x.lignesJournal !== e.n || x.empreinteJournal !== e.precedente) return 'L’export ne porte pas l’empreinte du journal qui le précède.';
+      if (x.nature === 'liste' && etat.enAttente().length) return t('verif.export_attente');
+      if (x.lignesJournal !== e.n || x.empreinteJournal !== e.precedente) return t('verif.export_empreinte');
       etat.exports.push(e as Entree & { type: 'export' });
       return undefined;
     }
     default:
-      return 'Type de ligne inconnu.';
+      return t('verif.type');
   }
 }
 
@@ -238,42 +243,42 @@ export async function verifierListe(liste: Liste): Promise<Verification> {
   const { journal, original } = liste;
 
   if (journal.length === 0 || journal[0].type !== 'ouverture') {
-    erreurs.push({ n: null, message: 'Le journal ne commence pas par une ligne d’ouverture.' });
+    erreurs.push({ n: null, message: t('verif.pas_ouverture') });
     return { valide: false, erreurs, avertissements, etat };
   }
   const ouverture = (journal[0] as Entree & { type: 'ouverture' }).contenu;
   const contenuCalcule = await empreinteContenu(original);
   if (ouverture.original.empreinteContenu !== contenuCalcule) {
-    erreurs.push({ n: 0, message: 'L’original contenu dans le fichier a été modifié depuis l’import.' });
+    erreurs.push({ n: 0, message: t('verif.original_modifie') });
   }
   if (ouverture.original.empreinteFichier !== original.empreinteFichier) {
-    erreurs.push({ n: 0, message: 'L’empreinte du fichier importé ne correspond pas à celle de l’ouverture.' });
+    erreurs.push({ n: 0, message: t('verif.empreinte_import') });
   }
   if (etat.indexMenages.size !== original.lignes.length) {
-    erreurs.push({ n: 0, message: 'Identifiants de ménage en double dans l’original.' });
+    erreurs.push({ n: 0, message: t('verif.doublons_original') });
   }
 
   let precedente = EMPREINTE_INITIALE;
   let datePrecedente = '';
   for (let i = 0; i < journal.length; i++) {
     const e = journal[i];
-    if (e.n !== i) erreurs.push({ n: i, message: `Numérotation rompue (ligne ${e.n} trouvée en position ${i}).` });
-    if (e.precedente !== precedente) erreurs.push({ n: i, message: 'Chaîne d’empreintes rompue : la ligne précédente a été modifiée, supprimée ou déplacée.' });
+    if (e.n !== i) erreurs.push({ n: i, message: t('verif.numerotation', { n: e.n, i }) });
+    if (e.precedente !== precedente) erreurs.push({ n: i, message: t('verif.chaine') });
     const signee = partieSignee(e);
     if ((await empreinteEntree(signee, e.signature)) !== e.empreinte) {
-      erreurs.push({ n: i, message: 'Le contenu de la ligne ne correspond plus à son empreinte.' });
+      erreurs.push({ n: i, message: t('verif.contenu') });
     }
     // Pour l'ouverture, l'auteur est dans la liste des utilisateurs qu'elle déclare.
     const auteur =
       e.type === 'ouverture' ? e.contenu.utilisateurs.find((u) => u.empreinte === e.auteur) : etat.utilisateurs.get(e.auteur);
-    if (!auteur) erreurs.push({ n: i, message: 'Ligne signée par une clé non déclarée.' });
+    if (!auteur) erreurs.push({ n: i, message: t('verif.cle_non_declaree') });
     else if (!(await verifier(auteur.cle, jsonCanonique(signee), e.signature))) {
-      erreurs.push({ n: i, message: `Signature invalide (auteur annoncé : ${auteur.nom}).` });
+      erreurs.push({ n: i, message: t('verif.signature', { nom: auteur.nom }) });
     }
     const regle = appliquer(etat, signee);
     if (regle) erreurs.push({ n: i, message: regle });
     if (datePrecedente && e.le < datePrecedente) {
-      avertissements.push({ n: i, message: 'Date antérieure à celle de la ligne précédente (horloges des postes à vérifier).' });
+      avertissements.push({ n: i, message: t('verif.date') });
     }
     datePrecedente = e.le;
     precedente = e.empreinte;
@@ -324,13 +329,13 @@ export async function creerListe(
   responsable: IdentiteDeverrouillee,
   utilisateurs: Utilisateur[],
 ): Promise<{ liste: Liste; etat: Etat }> {
-  if (!original.colonnes.includes(original.colonneId)) throw new Error('Colonne d’identifiant introuvable.');
+  if (!original.colonnes.includes(original.colonneId)) throw new Error(t('verif.colonne_id'));
   const iId = original.colonnes.indexOf(original.colonneId);
   const ids = original.lignes.map((l) => l[iId]);
   const vides = ids.filter((id) => !id.trim()).length;
-  if (vides) throw new Error(`${vides} ligne(s) sans identifiant de ménage dans la colonne « ${original.colonneId} ».`);
+  if (vides) throw new Error(t('verif.sans_id', { n: vides, colonne: original.colonneId }));
   const doublon = ids.find((id, i) => ids.indexOf(id) !== i);
-  if (doublon) throw new Error(`Identifiant de ménage en double : ${doublon}. Choisissez une colonne d’identifiant unique.`);
+  if (doublon) throw new Error(t('verif.id_double', { id: doublon }));
 
   const liste: Liste = { format: '2x2-liste-contenu', version: 1, original, journal: [] };
   const etat = new Etat(original);

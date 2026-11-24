@@ -6,6 +6,7 @@
  * « données associées » d'AES-GCM : le modifier rend le déchiffrement impossible.
  */
 import { aleatoire, depuisBase64, depuisUtf8, jsonCanonique, utf8, versBase64 } from './encodage.ts';
+import { t } from '../i18n/index.ts';
 
 export const ITERATIONS_PAR_DEFAUT = 600_000;
 
@@ -21,7 +22,7 @@ export interface EnveloppeChiffree {
 
 export class MotDePasseIncorrect extends Error {
   constructor() {
-    super('Mot de passe incorrect, ou fichier altéré.');
+    super(t('err.mdp_incorrect'));
     this.name = 'MotDePasseIncorrect';
   }
 }
@@ -67,13 +68,13 @@ export async function chiffrerJson(
 
 export async function dechiffrerJson<T>(enveloppe: EnveloppeChiffree, motDePasse: string, formatAttendu: string): Promise<T> {
   if (enveloppe?.format !== formatAttendu) {
-    throw new Error(`Ce fichier n'est pas au format attendu (${formatAttendu}).`);
+    throw new Error(t('err.format_attendu', { format: formatAttendu }));
   }
   if (enveloppe.kdf?.nom !== 'PBKDF2-SHA256' || enveloppe.chiffre?.nom !== 'AES-GCM-256') {
-    throw new Error('Paramètres de chiffrement non reconnus.');
+    throw new Error(t('err.chiffrement'));
   }
   if (!(enveloppe.kdf.iterations >= 100_000)) {
-    throw new Error('Nombre d’itérations PBKDF2 trop faible : fichier refusé.');
+    throw new Error(t('err.pbkdf2'));
   }
   const cle = await deriverCle(motDePasse, depuisBase64(enveloppe.kdf.sel), enveloppe.kdf.iterations);
   let clair: ArrayBuffer;

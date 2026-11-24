@@ -8,6 +8,7 @@ import type { CategorieAlerte } from '../model/types.ts';
 import { lireCondition, lireNombre, type Regle } from './regles.ts';
 import { centre, detecterColonneGps, distance, formatDistance, groupesProches, pointDepuis, type Point } from './geo.ts';
 import { normaliserTelephone, nomsProches } from './similarite.ts';
+import { langueCourante, t } from '../i18n/index.ts';
 
 export interface Alerte {
   /** Identifiant stable « règle:ménage(s) » : il relie l'alerte aux décisions du journal. */
@@ -33,8 +34,9 @@ export function lireDate(texte: string | undefined): number | undefined {
 }
 
 function formatDuree(minutes: number): string {
-  if (Math.abs(minutes) < 120) return `${Math.round(minutes * 10) / 10} min`;
-  return `${Math.round((minutes / 60) * 10) / 10} h`;
+  const n = (x: number) => (Math.round(x * 10) / 10).toLocaleString(langueCourante());
+  if (Math.abs(minutes) < 120) return `${n(minutes)} min`;
+  return `${n(minutes / 60)} h`;
 }
 
 const normaliserValeur = (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -72,15 +74,15 @@ export function relationsLien(etat: Etat, aller: string, retour?: string): Relat
     const code = (etat.valeur(id, aller) ?? '').trim();
     if (code) {
       const cible = index.get(cleCode(code));
-      if (!cible) probleme(id, `« ${code} » (${aller}) est introuvable dans la liste`);
-      else if (cible === id) probleme(id, `le ménage se désigne lui-même (${aller})`);
+      if (!cible) probleme(id, t('alerte.lien_introuvable', { code, colonne: aller }));
+      else if (cible === id) probleme(id, t('alerte.lien_soi', { colonne: aller }));
       else lier(id, cible);
     }
     if (retour) {
       for (const c of (etat.valeur(id, retour) ?? '').split(/[\s,;]+/).filter(Boolean)) {
         const cible = index.get(cleCode(c));
-        if (!cible) probleme(id, `« ${c} » (${retour}) est introuvable dans la liste`);
-        else if (cible === id) probleme(id, `le ménage se désigne lui-même (${retour})`);
+        if (!cible) probleme(id, t('alerte.lien_introuvable', { code: c, colonne: retour }));
+        else if (cible === id) probleme(id, t('alerte.lien_soi', { colonne: retour }));
         else lier(cible, id);
       }
     }
@@ -134,8 +136,8 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
           if (debut === undefined || fin === undefined) continue;
           const minutes = (fin - debut) / 60_000;
           if (minutes < 0) continue; // relève de la règle ordre_dates
-          if (min !== undefined && minutes < min) ajouter(r, [id], `Durée de ${formatDuree(minutes)} (minimum : ${formatDuree(min)})`);
-          else if (max !== undefined && minutes > max) ajouter(r, [id], `Durée de ${formatDuree(minutes)} (maximum : ${formatDuree(max)})`);
+          if (min !== undefined && minutes < min) ajouter(r, [id], t('alerte.duree_min', { duree: formatDuree(minutes), seuil: formatDuree(min) }));
+          else if (max !== undefined && minutes > max) ajouter(r, [id], t('alerte.duree_max', { duree: formatDuree(minutes), seuil: formatDuree(max) }));
         }
         break;
       case 'ordre_dates':
@@ -143,7 +145,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
           const a = lireDate(v(id, r.colonne));
           const b = lireDate(v(id, r.colonne2));
           if (a !== undefined && b !== undefined && a > b) {
-            ajouter(r, [id], `« ${r.colonne} » (${v(id, r.colonne)}) est postérieure à « ${r.colonne2} » (${v(id, r.colonne2)})`);
+            ajouter(r, [id], t('alerte.ordre', { a: r.colonne, va: v(id, r.colonne), b: r.colonne2, vb: v(id, r.colonne2) }));
           }
         }
         break;
@@ -155,7 +157,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
           const d = lireDate(v(id, r.colonne));
           if (d === undefined) continue;
           if ((debut !== undefined && d < debut) || (fin !== undefined && d > fin)) {
-            ajouter(r, [id], `Date ${v(id, r.colonne)} hors de la période ${r.min || '…'} – ${r.max || '…'}`);
+            ajouter(r, [id], t('alerte.periode', { date: v(id, r.colonne), min: r.min || '…', max: r.max || '…' }));
           }
         }
         break;
@@ -165,19 +167,19 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
           const brut = v(id, r.colonne).trim();
           if (!brut) continue;
           const n = lireNombre(brut);
-          if (n === undefined) ajouter(r, [id], `« ${brut} » n’est pas un nombre`);
-          else if (min !== undefined && n < min) ajouter(r, [id], `${r.colonne} = ${brut} (minimum : ${r.min})`);
-          else if (max !== undefined && n > max) ajouter(r, [id], `${r.colonne} = ${brut} (maximum : ${r.max})`);
+          if (n === undefined) ajouter(r, [id], t('alerte.pas_nombre', { valeur: brut }));
+          else if (min !== undefined && n < min) ajouter(r, [id], t('alerte.seuil_min', { colonne: r.colonne, valeur: brut, seuil: r.min }));
+          else if (max !== undefined && n > max) ajouter(r, [id], t('alerte.seuil_max', { colonne: r.colonne, valeur: brut, seuil: r.max }));
         }
         break;
       case 'obligatoire':
-        for (const id of ids) if (!v(id, r.colonne).trim()) ajouter(r, [id], `« ${r.colonne} » est vide`);
+        for (const id of ids) if (!v(id, r.colonne).trim()) ajouter(r, [id], t('alerte.vide', { colonne: r.colonne }));
         break;
       case 'valeurs': {
         const admises = new Set(r.liste.split(';').map((x) => x.trim().toLowerCase()).filter(Boolean));
         for (const id of ids) {
           const val = v(id, r.colonne).trim();
-          if (val && !admises.has(val.toLowerCase())) ajouter(r, [id], `Valeur « ${val} » hors liste (${[...admises].join(', ')})`);
+          if (val && !admises.has(val.toLowerCase())) ajouter(r, [id], t('alerte.hors_liste', { valeur: val, liste: [...admises].join(', ') }));
         }
         break;
       }
@@ -190,7 +192,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
         }
         for (const id of ids) {
           const val = v(id, r.colonne).trim();
-          if (val && !motif.test(val)) ajouter(r, [id], `« ${val} » ne respecte pas le format attendu`);
+          if (val && !motif.test(val)) ajouter(r, [id], t('alerte.format', { valeur: val }));
         }
         break;
       }
@@ -201,14 +203,14 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
             const k = normaliserValeur(v(id, r.colonne));
             return k && r.colonne2 ? `${k}|${normaliserValeur(v(id, r.colonne2))}` : k;
           },
-          (m) => `${m.length} ménages partagent la même valeur de « ${r.colonne} » (${v(m[0], r.colonne)})`,
+          (m) => t('alerte.doublon', { n: m.length, colonne: r.colonne, valeur: v(m[0], r.colonne) }),
         );
         break;
       case 'doublon_telephone':
         groupesDoublons(
           r,
           (id) => normaliserTelephone(v(id, r.colonne)),
-          (m) => `${m.length} ménages partagent le numéro ${v(m[0], r.colonne)}`,
+          (m) => t('alerte.doublon_telephone', { n: m.length, numero: v(m[0], r.colonne) }),
         );
         break;
       case 'noms_proches': {
@@ -230,7 +232,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
           for (const m of membres) groupes.set(racine(m), [...(groupes.get(racine(m)) ?? []), m]);
           for (const g of groupes.values()) {
             if (g.length < 2) continue;
-            ajouter(r, g, `Noms proches${r.colonne2 ? ` (${v(g[0], r.colonne2)})` : ''} : ${g.map((m) => `« ${v(m, r.colonne)} »`).join(', ')}`);
+            ajouter(r, g, t(r.colonne2 ? 'alerte.noms_groupe' : 'alerte.noms', { groupe: r.colonne2 ? v(g[0], r.colonne2) : '', noms: g.map((m) => t('commun.guillemets', { texte: v(m, r.colonne) })).join(', ') }));
           }
         }
         break;
@@ -240,7 +242,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
         const points = pointsMenages(r.colonne);
         for (const g of groupesProches(points, seuil)) {
           const d = distance(points.get(g[0])!, points.get(g[1])!);
-          ajouter(r, g, `${g.length} ménages à moins de ${formatDistance(seuil)} les uns des autres (${formatDistance(d)} entre ${g[0]} et ${g[1]})`);
+          ajouter(r, g, t('alerte.proches', { n: g.length, seuil: formatDistance(seuil), distance: formatDistance(d), a: g[0], b: g[1] }));
         }
         break;
       }
@@ -257,7 +259,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
         for (const [e, pts] of [...parEnqueteur].sort(([a], [b]) => a.localeCompare(b))) {
           for (const g of groupesProches(pts, rayon)) {
             if (g.length < minimum) continue;
-            ajouter(r, g, `${e} : ${g.length} entretiens enregistrés dans un rayon d’environ ${formatDistance(rayon)}`, `${e}:${g[0]}`);
+            ajouter(r, g, t('alerte.groupes', { enqueteur: e, n: g.length, rayon: formatDistance(rayon) }), `${e}:${g[0]}`);
           }
         }
         break;
@@ -268,7 +270,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
         for (const id of ids) {
           if (etat.estExclu(id)) continue;
           if (c.valeurs.has(v(id, c.colonne).trim().toLowerCase()) && !v(id, r.colonne).trim()) {
-            ajouter(r, [id], `« ${r.colonne} » est vide alors que ${c.colonne} = ${v(id, c.colonne)}`);
+            ajouter(r, [id], t('alerte.vide_si', { colonne: r.colonne, condition: c.colonne, valeur: v(id, c.colonne) }));
           }
         }
         break;
@@ -280,31 +282,31 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
         const point = (id: string) => (gps ? pointDepuis((col) => etat.valeur(id, col), gps) : undefined);
         // Problèmes de saisie : code introuvable, ménage qui se désigne lui-même (de l'un ou l'autre côté).
         for (const [id, problemes] of rel.problemes) {
-          if (!etat.estExclu(id)) ajouter(r, [id], `Lien : ${problemes.join(' ; ')}`, `saisie:${id}`);
+          if (!etat.estExclu(id)) ajouter(r, [id], t('alerte.lien_saisie', { problemes: problemes.join(t('alerte.separateur')) }), `saisie:${id}`);
         }
         for (const [heberge, hotes] of rel.hotesDe) {
           if (etat.estExclu(heberge)) continue;
           const problemes: string[] = [];
-          if (hotes.size > 1) problemes.push(`rattaché à plusieurs ménages hôtes (${[...hotes].join(', ')})`);
+          if (hotes.size > 1) problemes.push(t('alerte.plusieurs_hotes', { hotes: [...hotes].join(', ') }));
           for (const hote of hotes) {
-            if (etat.estExclu(hote)) problemes.push(`${hote} est exclu de la liste`);
+            if (etat.estExclu(hote)) problemes.push(t('alerte.hote_exclu', { hote }));
             if (c && !c.valeurs.has(v(hote, c.colonne).trim().toLowerCase())) {
-              problemes.push(`${hote} a ${c.colonne} = ${v(hote, c.colonne) || '(vide)'} (attendu : ${[...c.valeurs].join(' ou ')})`);
+              problemes.push(t('alerte.hote_condition', { hote, colonne: c.colonne, valeur: v(hote, c.colonne) || t('commun.vide'), attendu: [...c.valeurs].join(t('alerte.ou')) }));
             }
             const pa = point(heberge);
             const pb = point(hote);
             if (max !== undefined && pa && pb) {
               const d = distance(pa, pb);
-              if (d > max) problemes.push(`${heberge} et ${hote} sont à ${formatDistance(d)} l’un de l’autre (maximum : ${formatDistance(max)})`);
+              if (d > max) problemes.push(t('alerte.hote_distance', { heberge, hote, distance: formatDistance(d), max: formatDistance(max) }));
             }
           }
-          if (problemes.length) ajouter(r, [heberge, ...hotes], `Lien ${heberge} → ${[...hotes].join(', ')} : ${problemes.join(' ; ')}`, heberge);
+          if (problemes.length) ajouter(r, [heberge, ...hotes], t('alerte.lien', { heberge, hotes: [...hotes].join(', '), problemes: problemes.join(t('alerte.separateur')) }), heberge);
         }
         if (min !== undefined) {
           for (const [hote, heberges] of rel.hebergesDe) {
             const inclus = [...heberges].filter((m) => !etat.estExclu(m));
             if (inclus.length > min && !etat.estExclu(hote)) {
-              ajouter(r, [hote, ...inclus], `${hote} est rattaché à ${inclus.length} ménages (maximum : ${min})`, `trop:${hote}`);
+              ajouter(r, [hote, ...inclus], t('alerte.trop_heberges', { hote, n: inclus.length, max: min }), `trop:${hote}`);
             }
           }
         }
@@ -325,7 +327,8 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
           ajouter(
             r,
             [id, ...exclus],
-            `${c.colonne} = ${v(id, c.colonne)}, mais ${inclus.length === 0 ? 'aucun ménage inclus ne lui est rattaché' : `seulement ${inclus.length} ménage(s) inclus lui sont rattachés (minimum : ${minimum})`}${exclus.length ? ` (${exclus.length} ménage(s) rattaché(s) exclu(s) : ${exclus.join(', ')})` : ''}`,
+            t(inclus.length === 0 ? 'alerte.requis_aucun' : 'alerte.requis_peu', { colonne: c.colonne, valeur: v(id, c.colonne), n: inclus.length, min: minimum }) +
+              (exclus.length ? t('alerte.requis_exclus', { n: exclus.length, menages: exclus.join(', ') }) : ''),
             id,
           );
         }
@@ -344,7 +347,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
           const c = centre(membres.map((m) => points.get(m)!));
           for (const m of membres) {
             const d = distance(points.get(m)!, c);
-            if (d > seuil) ajouter(r, [m], `À ${formatDistance(d)} du centre des ménages de « ${g} » (maximum : ${formatDistance(seuil)})`);
+            if (d > seuil) ajouter(r, [m], t('alerte.hors_zone', { distance: formatDistance(d), groupe: g, max: formatDistance(seuil) }));
           }
         }
         break;
@@ -372,7 +375,7 @@ export function calculerAlertes(etat: Etat, regles: Regle[]): Alerte[] {
       ajouter(
         r,
         touches,
-        `${e} : ${touches.length} ménages signalés par « ${r.liste} » sur ${menages.length} (${Math.round(part * 100)} %), contre ${Math.round(autres * 100)} % pour les autres enquêteurs`,
+        t('alerte.enqueteur', { enqueteur: e, n: touches.length, regle: r.liste, total: menages.length, part: Math.round(part * 100), autres: Math.round(autres * 100) }),
         e,
       );
     }

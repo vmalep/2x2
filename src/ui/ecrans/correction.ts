@@ -1,9 +1,9 @@
 import { cellule, corriger, type CorrectionSuivie } from '../../model/journal.ts';
 import { relationsLien } from '../../controles/controles.ts';
 import { allerValidation } from './validation.ts';
-import { CHAMP_STATUT, DECISIONS_ALERTE, MOTIFS_EXCLUSION, motifsPour, type Motif } from '../../model/types.ts';
+import { CHAMP_STATUT, DECISIONS_ALERTE, MOTIFS_EXCLUSION, libelleMotif, motifsPour, type Motif } from '../../model/types.ts';
 import { badge, bouton, encadre } from '../composants.ts';
-import { dateLisible, h, remplacer } from '../dom.ts';
+import { dateLisible, h, remplacer, tr } from '../dom.ts';
 import { telecharger } from '../fichiers.ts';
 import { COLONNES_RETOUR, exporterVisite, NOM_PRECHARGEMENT } from '../../model/visite.ts';
 import { detecterColonnes } from '../../controles/parametres.ts';
@@ -20,6 +20,7 @@ import { choisirFichier } from '../fichiers.ts';
 import { choixColonnes } from '../colonnes.ts';
 import { ecranComparaison } from './comparaison.ts';
 import { alertesCourantes, aller, apresModification, nomAuteur, notifier, occupe, peut, session } from '../session.ts';
+import { libelles, t } from '../../i18n/index.ts';
 
 const COLONNES_TECHNIQUES = /^(_|start$|end$|today$|deviceid$|meta\/|formhub\/|donnees_fictives$)/;
 
@@ -40,7 +41,7 @@ export function historiqueMenage(menage: string): CorrectionSuivie[] {
 }
 
 export function statutCorrection(c: CorrectionSuivie) {
-  return c.statut === 'en_attente' ? badge('en attente', 'attente') : c.statut === 'acceptee' ? badge('acceptée', 'ok') : badge('refusée', 'refus');
+  return c.statut === 'en_attente' ? badge(t('correction.en_attente'), 'attente') : c.statut === 'acceptee' ? badge(t('correction.acceptee'), 'ok') : badge(t('correction.refusee'), 'refus');
 }
 
 export function ligneHistorique(c: CorrectionSuivie) {
@@ -48,16 +49,16 @@ export function ligneHistorique(c: CorrectionSuivie) {
   return h(
     'li',
     { class: 'historique' },
-    h('div', { class: 'entete-historique' }, h('strong', null, e.contenu.champ === CHAMP_STATUT ? 'Statut du ménage' : e.contenu.champ), statutCorrection(c), h('span', { class: 'discret' }, `n° ${e.n}`)),
-    h('div', { class: 'diff' }, h('del', null, e.contenu.ancienne || '(vide)'), ' → ', h('ins', null, e.contenu.nouvelle || '(vide)')),
-    h('div', { class: 'discret' }, `${e.contenu.motif} · ${nomAuteur(e.auteur)} · ${dateLisible(e.le)}`),
-    e.contenu.commentaire && h('div', { class: 'commentaire' }, `« ${e.contenu.commentaire} »`),
+    h('div', { class: 'entete-historique' }, h('strong', null, e.contenu.champ === CHAMP_STATUT ? t('correction.statut_menage') : e.contenu.champ), statutCorrection(c), h('span', { class: 'discret' }, t('correction.numero', { n: e.n }))),
+    h('div', { class: 'diff' }, h('del', null, e.contenu.ancienne || t('commun.vide')), ' → ', h('ins', null, e.contenu.nouvelle || t('commun.vide'))),
+    h('div', { class: 'discret' }, `${libelleMotif(e.contenu.motif)} · ${nomAuteur(e.auteur)} · ${dateLisible(e.le)}`),
+    e.contenu.commentaire && h('div', { class: 'commentaire' }, t('commun.guillemets', { texte: e.contenu.commentaire })),
     c.decision &&
       h(
         'div',
         { class: 'discret' },
-        `${c.statut === 'acceptee' ? 'Acceptée' : 'Refusée'} par ${nomAuteur(c.decision.auteur)} · ${dateLisible(c.decision.le)}`,
-        c.decision.contenu.commentaire && ` · « ${c.decision.contenu.commentaire} »`,
+        t(c.statut === 'acceptee' ? 'correction.acceptee_par' : 'correction.refusee_par', { nom: nomAuteur(c.decision.auteur), date: dateLisible(c.decision.le) }),
+        c.decision.contenu.commentaire && t('journal.r_commentaire_alerte', { texte: c.decision.contenu.commentaire }),
       ),
   );
 }
@@ -72,23 +73,23 @@ export function formulaireCorrection(id: string, champ: string, ancre: HTMLEleme
   const statut = champ === CHAMP_STATUT;
   const nouvelle = statut
     ? h('input', { type: 'hidden', value: ancienne === 'exclu' ? 'inclus' : 'exclu' })
-    : h('input', { type: 'text', value: ancienne, 'aria-label': 'Nouvelle valeur' });
+    : h('input', { type: 'text', value: ancienne, 'aria-label': t('commun.nouvelle_valeur') });
   const motif = h(
     'select',
-    { 'aria-label': 'Motif', required: true },
-    h('option', { value: '' }, statut ? (ancienne === 'exclu' ? '— Motif de la réintégration —' : '— Motif de l’exclusion —') : '— Motif (obligatoire) —'),
-    motifsPour(champ, ancienne).map((m) => h('option', { value: m }, m)),
+    { 'aria-label': t('correction.motif'), required: true },
+    h('option', { value: '' }, statut ? (ancienne === 'exclu' ? t('correction.motif_reintegration') : t('correction.motif_exclusion')) : t('correction.motif_obligatoire')),
+    motifsPour(champ, ancienne).map((m) => h('option', { value: m }, libelleMotif(m))),
   );
-  const commentaire = h('textarea', { rows: 2, placeholder: 'Commentaire', 'aria-label': 'Commentaire' });
+  const commentaire = h('textarea', { rows: 2, placeholder: t('commun.commentaire'), 'aria-label': t('commun.commentaire') });
   const form = h(
     'form',
     {
       class: 'form-correction',
       onsubmit: (e: Event) => {
         e.preventDefault();
-        if (!motif.value) return notifier('Choisissez un motif.', 'erreur');
-        if (statut && !commentaire.value.trim()) return notifier('Expliquez la raison en commentaire.', 'erreur');
-        occupe('Signature de la correction…', async () => {
+        if (!motif.value) return notifier(t('correction.choisir_motif'), 'erreur');
+        if (statut && !commentaire.value.trim()) return notifier(t('correction.expliquer'), 'erreur');
+        occupe(t('correction.signature'), async () => {
           await corriger(liste!, etat!, session.identite!, {
             menage: id,
             champ,
@@ -97,7 +98,7 @@ export function formulaireCorrection(id: string, champ: string, ancre: HTMLEleme
             motif: motif.value as Motif,
             commentaire: commentaire.value.trim(),
           });
-          notifier('Correction signée. Elle attend la validation d’une autre personne.', 'succes');
+          notifier(t('correction.signee'), 'succes');
           await apresModification();
         });
       },
@@ -106,18 +107,18 @@ export function formulaireCorrection(id: string, champ: string, ancre: HTMLEleme
       ? h(
           'div',
           null,
-          h('strong', null, `${ancienne === 'exclu' ? 'Proposer la réintégration' : 'Proposer l’exclusion'} du ménage ${id}`),
-          h('div', { class: 'discret' }, 'La proposition devra être validée par une autre personne.'),
+          h('strong', null, t(ancienne === 'exclu' ? 'correction.proposer_reintegration_de' : 'correction.proposer_exclusion_de', { id })),
+          h('div', { class: 'discret' }, t('correction.proposition_validee')),
         )
-      : h('div', { class: 'discret' }, `${id} · ${champ} — valeur actuelle : `, h('strong', null, ancienne || '(vide)')),
+      : h('div', { class: 'discret' }, tr('correction.valeur_actuelle', { id, champ, valeur: ancienne || t('commun.vide') })),
     nouvelle,
     motif,
     commentaire,
     h(
       'div',
       { class: 'ligne' },
-      h('button', { type: 'submit', class: 'bouton principal' }, 'Signer la correction'),
-      bouton('Annuler', surAnnulation),
+      h('button', { type: 'submit', class: 'bouton principal' }, t('correction.signer')),
+      bouton(t('commun.annuler'), surAnnulation),
     ),
   );
   ancre.after(form);
@@ -201,13 +202,13 @@ export function ecranCorrection() {
   const libellesAlertes = (id: string) => [...new Set((alertesParMenage.get(id) ?? []).map((a) => a.libelle))];
   /** Décisions des alertes du ménage : code de décision, ou « sans » pour une alerte non décidée. */
   const decisionsMenage = (id: string) => [...new Set((alertesParMenage.get(id) ?? []).map((a) => etat!.decisionsAlertes.get(a.id)?.contenu.decision ?? 'sans'))];
-  const LIBELLES_DECISION: Record<string, string> = { sans: 'Sans décision', ...DECISIONS_ALERTE.integrite };
+  const LIBELLES_DECISION: Record<string, string> = { sans: t('correction.sans_decision'), ...DECISIONS_ALERTE.integrite };
 
   const etatsMenage = (id: string): string[] => {
-    const r: string[] = [etat!.estExclu(id) ? 'Exclu' : 'Inclus'];
+    const r: string[] = [etat!.estExclu(id) ? t('correction.exclu') : t('correction.inclus')];
     const s = statutMenage(id);
-    if (s === 'attente') r.push('Correction en attente');
-    if (valeursCorrigees(id)) r.push('Corrigé');
+    if (s === 'attente') r.push(t('correction.correction_attente'));
+    if (valeursCorrigees(id)) r.push(t('correction.corrige'));
     return r;
   };
 
@@ -215,18 +216,18 @@ export function ecranCorrection() {
   // Toutes les colonnes possibles ; l'utilisateur choisit lesquelles afficher (« Colonnes… »).
   const possibles: Valeurs[] = [
     { cle: 'id', titre: o.colonneId, filtre: 'texte', valeur: (id) => id },
-    ...(colEnq ? [{ cle: 'enq', titre: 'Enquêteur', filtre: 'liste' as const, valeur: (id: string) => etat!.valeur(id, colEnq) ?? '' }] : []),
-    ...(colDate ? [{ cle: 'date', titre: 'Date', filtre: 'liste' as const, valeur: jourEntretien, tri: horodatageDe }] : []),
-    { cle: 'alertes', titre: 'Alertes', filtre: 'liste', valeur: (id) => libellesAlertes(id).join(', '), liste: libellesAlertes },
-    { cle: 'etat', titre: 'État', filtre: 'liste', valeur: (id) => etatsMenage(id).join(', '), liste: etatsMenage },
+    ...(colEnq ? [{ cle: 'enq', titre: t('commun.enqueteur'), filtre: 'liste' as const, valeur: (id: string) => etat!.valeur(id, colEnq) ?? '' }] : []),
+    ...(colDate ? [{ cle: 'date', titre: t('commun.date'), filtre: 'liste' as const, valeur: jourEntretien, tri: horodatageDe }] : []),
+    { cle: 'alertes', titre: t('regles.col_alertes'), filtre: 'liste', valeur: (id) => libellesAlertes(id).join(', '), liste: libellesAlertes },
+    { cle: 'etat', titre: t('correction.etat'), filtre: 'liste', valeur: (id) => etatsMenage(id).join(', '), liste: etatsMenage },
     ...o.colonnes.filter((c) => c !== o.colonneId).map((c): Valeurs => ({ cle: `c:${c}`, titre: c, filtre: 'texte', valeur: (id) => etat!.valeur(id, c) ?? '' })),
   ];
   const choixCols = choixColonnes(
     `2x2-colonnes-correction-${o.empreinteFichier}`,
     possibles.map((v) => ({
       cle: v.cle,
-      libelle: v.cle === 'id' ? `${v.titre} (identifiant)` : v.titre,
-      groupe: v.cle.startsWith('c:') ? 'Colonnes de l’export' : 'Repères',
+      libelle: v.cle === 'id' ? t('correction.identifiant', { titre: v.titre }) : v.titre,
+      groupe: v.cle.startsWith('c:') ? t('correction.groupe_export') : t('correction.groupe_reperes'),
       obligatoire: v.cle === 'id',
     })),
     ['id', 'enq', 'date', 'alertes', 'etat', ...donnees.map((c) => `c:${c}`)],
@@ -238,7 +239,7 @@ export function ecranCorrection() {
   if (vue.tri && !colonnes.some((c) => c.cle === vue.tri!.cle)) vue.tri = null;
 
   const zoneTable = h('div', { class: 'cadre-menages' });
-  const zoneFiche = h('section', { class: 'fiche', 'aria-label': 'Fiche du ménage' });
+  const zoneFiche = h('section', { class: 'fiche', 'aria-label': t('correction.fiche') });
   const resume = h('span', { class: 'discret' });
   const pagination = h('div', { class: 'pagination' });
 
@@ -261,11 +262,11 @@ export function ecranCorrection() {
       }
       return !q || o.colonnes.some((c) => (etat!.valeur(id, c) ?? '').toLowerCase().includes(q));
     });
-    const t = vue.tri;
-    if (t) {
-      const col = colonnes.find((c) => c.cle === t.cle);
+    const tri = vue.tri;
+    if (tri) {
+      const col = colonnes.find((c) => c.cle === tri.cle);
       const v = col?.tri ?? col?.valeur;
-      if (v) retenus.sort((a, b) => t.sens * comparateur.compare(v(a), v(b)));
+      if (v) retenus.sort((a, b) => tri.sens * comparateur.compare(v(a), v(b)));
     }
     return retenus;
   }
@@ -275,7 +276,7 @@ export function ecranCorrection() {
     h('button', {
       type: 'button',
       class: 'tri',
-      title: 'Trier',
+      title: t('commun.trier'),
       onclick: () => {
         vue.tri = vue.tri?.cle !== c.cle ? { cle: c.cle, sens: 1 } : vue.tri.sens === 1 ? { cle: c.cle, sens: -1 } : null;
         dessinerTable();
@@ -286,8 +287,8 @@ export function ecranCorrection() {
     if (c.filtre === 'texte') {
       return h('input', {
         type: 'search',
-        placeholder: 'Filtrer…',
-        'aria-label': `Filtrer ${c.titre}`,
+        placeholder: t('commun.filtrer'),
+        'aria-label': t('commun.filtrer_col', { titre: c.titre }),
         value: vue.filtres[c.cle] ?? '',
         oninput: (e: Event) => {
           vue.filtres[c.cle] = (e.target as HTMLInputElement).value;
@@ -307,28 +308,28 @@ export function ecranCorrection() {
     return h(
       'select',
       {
-        'aria-label': `Filtrer ${c.titre}`,
+        'aria-label': t('commun.filtrer_col', { titre: c.titre }),
         onchange: (e: Event) => {
           vue.filtres[c.cle] = (e.target as HTMLSelectElement).value;
           vue.page = 0;
           dessinerTable();
         },
       },
-      h('option', { value: TOUS, selected: !vue.filtres[c.cle] }, 'Tous'),
+      h('option', { value: TOUS, selected: !vue.filtres[c.cle] }, t('commun.tous')),
       c.cle === 'alertes' && [
-        h('option', { value: AVEC_ALERTE, selected: vue.filtres[c.cle] === AVEC_ALERTE }, `Avec alerte (${avec})`),
-        h('option', { value: SANS_ALERTE, selected: vue.filtres[c.cle] === SANS_ALERTE }, `Sans alerte (${tous.length - avec})`),
+        h('option', { value: AVEC_ALERTE, selected: vue.filtres[c.cle] === AVEC_ALERTE }, t('correction.avec_alerte', { n: avec })),
+        h('option', { value: SANS_ALERTE, selected: vue.filtres[c.cle] === SANS_ALERTE }, t('correction.sans_alerte_n', { n: tous.length - avec })),
         parDecision.size > 0 &&
           h(
             'optgroup',
-            { label: 'Par décision' },
+            { label: t('correction.par_decision') },
             Object.entries(LIBELLES_DECISION)
               .filter(([d]) => parDecision.has(d))
               .map(([d, l]) => h('option', { value: PAR_DECISION + d, selected: vue.filtres[c.cle] === PAR_DECISION + d }, `${l} (${parDecision.get(d)})`)),
           ),
       ],
       c.cle === 'alertes'
-        ? valeurs.length > 0 && h('optgroup', { label: 'Par type d’alerte' }, valeurs.map(([v, k]) => h('option', { value: v, selected: vue.filtres[c.cle] === v }, `${v} (${k})`)))
+        ? valeurs.length > 0 && h('optgroup', { label: t('correction.par_type') }, valeurs.map(([v, k]) => h('option', { value: v, selected: vue.filtres[c.cle] === v }, `${v} (${k})`)))
         : valeurs.map(([v, k]) => h('option', { value: v, selected: vue.filtres[c.cle] === v }, `${v} (${k})`)),
     );
   });
@@ -336,8 +337,8 @@ export function ecranCorrection() {
   // ---- Sélection et exclusion en lot
   const caseTout = h('input', {
     type: 'checkbox',
-    'aria-label': 'Cocher tous les ménages filtrés',
-    title: 'Coche tous les ménages qui correspondent aux filtres (toutes pages)',
+    'aria-label': t('correction.cocher_tout'),
+    title: t('correction.cocher_tout_titre'),
     onchange: (e: Event) => {
       const oui = (e.target as HTMLInputElement).checked;
       for (const id of filtresCourants) oui ? coches.add(id) : coches.delete(id);
@@ -355,16 +356,16 @@ export function ecranCorrection() {
       })
       .join(' | ');
   const visite = peut('responsable') ? panneauVisite(cochesValides, aVerifier, colEnq, colDate) : null;
-  const decocher = peutCocher ? bouton('Tout décocher', () => (coches.clear(), dessinerTable())) : null;
+  const decocher = peutCocher ? bouton(t('commun.tout_decocher'), () => (coches.clear(), dessinerTable())) : null;
   const retours = peutCorriger || peutDecider() ? panneauRetours() : null;
   // Le plan prend la place du tableau (même cadre, même barre de séparation) ; la fiche reste en dessous.
   const boutonPlan = colonneGps()
-    ? bouton(planOuvert ? 'Afficher la liste' : 'Plan GPS', () => {
+    ? bouton(planOuvert ? t('correction.afficher_liste') : t('correction.plan'), () => {
         planOuvert = !planOuvert;
         zonePlan.hidden = !planOuvert;
         // Avec le plan, le tableau se réduit à ses en-têtes et filtres : on filtre ce que montre le plan.
         zoneTable.classList.toggle('filtres-seuls', planOuvert);
-        boutonPlan!.textContent = planOuvert ? 'Afficher la liste' : 'Plan GPS';
+        boutonPlan!.textContent = planOuvert ? t('correction.afficher_liste') : t('correction.plan');
         dessinerTable();
       })
     : null;
@@ -385,7 +386,7 @@ export function ecranCorrection() {
     return [...vues].map(([l, ds]) => {
       const uniques = [...new Set(ds)];
       const ouverte = uniques.includes('sans');
-      const decision = uniques.length === 1 ? LIBELLES_DECISION[uniques[0]] : 'décisions diverses';
+      const decision = uniques.length === 1 ? LIBELLES_DECISION[uniques[0]] : t('correction.decisions_diverses');
       return h(
         'div',
         { class: ouverte ? 'alerte-ouverte' : 'alerte-decidee' },
@@ -434,7 +435,7 @@ export function ecranCorrection() {
                         h('input', {
                           type: 'checkbox',
                           checked: coches.has(id),
-                          'aria-label': `Cocher le ménage ${id}`,
+                          'aria-label': t('correction.cocher_menage', { id }),
                           onchange: (e: Event) => {
                             (e.target as HTMLInputElement).checked ? coches.add(id) : coches.delete(id);
                             dessinerTable();
@@ -448,9 +449,9 @@ export function ecranCorrection() {
                         return h(
                           'td',
                           { class: 'badges' },
-                          etat!.estExclu(id) && badge('exclu', 'refus'),
-                          s === 'attente' && badge('en attente', 'attente'),
-                          valeursCorrigees(id) && badge('corrigé', 'ok'),
+                          etat!.estExclu(id) && badge(t('statut.exclu'), 'refus'),
+                          s === 'attente' && badge(t('correction.en_attente'), 'attente'),
+                          valeursCorrigees(id) && badge(t('correction.corrige_badge'), 'ok'),
                         );
                       }
                       const champ = c.cle.startsWith('c:') ? c.cle.slice(2) : c.cle === 'enq' ? colEnq : c.cle === 'date' ? colDate : '';
@@ -458,19 +459,19 @@ export function ecranCorrection() {
                     }),
                   ),
                 )
-              : h('tr', null, h('td', { colspan: colonnes.length + 1, class: 'vide' }, 'Aucun ménage ne correspond aux filtres.')),
+              : h('tr', null, h('td', { colspan: colonnes.length + 1, class: 'vide' }, t('correction.aucun_menage'))),
           ),
         ),
       ),
     );
-    resume.textContent = `${ids.length} ménage(s) sur ${tous.length}${coches.size ? ` · ${coches.size} coché(s)` : ''}`;
+    resume.textContent = t('correction.resume', { n: ids.length, total: tous.length }) + (coches.size ? t('correction.resume_coches', { n: coches.size }) : '');
     remplacer(
       pagination,
       bouton('‹', () => {
         vue.page--;
         dessinerTable();
       }, 'secondaire', vue.page === 0),
-      h('span', null, `Page ${vue.page + 1} / ${pages}`),
+      h('span', null, t('correction.page', { n: vue.page + 1, total: pages })),
       bouton('›', () => {
         vue.page++;
         dessinerTable();
@@ -501,14 +502,14 @@ export function ecranCorrection() {
     };
     // Catégories triées pour des couleurs stables.
     if (modeCouleurPlan !== 'alertes') {
-      const valeurs = [...new Set(retenus.map((id) => (modeCouleurPlan === 'enqueteur' ? (colEnq ? (etat!.valeur(id, colEnq) ?? '') : '') : jourEntretien(id)) || '(vide)'))].sort(comparateur.compare);
+      const valeurs = [...new Set(retenus.map((id) => (modeCouleurPlan === 'enqueteur' ? (colEnq ? (etat!.valeur(id, colEnq) ?? '') : '') : jourEntretien(id)) || t('commun.vide')))].sort(comparateur.compare);
       valeurs.forEach(couleurDe);
     }
     const ETATS_PLAN: Record<string, [string, string]> = {
-      ouverte: ['#a35a00', 'Alerte sans décision'],
-      decidee: ['#6b6b6b', 'Alerte décidée'],
-      aucune: ['#0f5f73', 'Sans alerte'],
-      exclu: ['#c0182b', 'Exclu'],
+      ouverte: ['#a35a00', t('validation.alerte_sans_decision')],
+      decidee: ['#6b6b6b', t('correction.alerte_decidee')],
+      aucune: ['#0f5f73', t('correction.sans_alerte')],
+      exclu: ['#c0182b', t('correction.exclu')],
     };
     const points: PointPlan[] = [];
     let sansPoint = 0;
@@ -524,7 +525,7 @@ export function ecranCorrection() {
         const e = etat!.estExclu(id) ? 'exclu' : d.includes('sans') ? 'ouverte' : d.length ? 'decidee' : 'aucune';
         couleur = ETATS_PLAN[e][0];
       } else {
-        couleur = couleurDe((modeCouleurPlan === 'enqueteur' ? (colEnq ? (etat!.valeur(id, colEnq) ?? '') : '') : jourEntretien(id)) || '(vide)');
+        couleur = couleurDe((modeCouleurPlan === 'enqueteur' ? (colEnq ? (etat!.valeur(id, colEnq) ?? '') : '') : jourEntretien(id)) || t('commun.vide'));
       }
       points.push({
         id,
@@ -549,50 +550,50 @@ export function ecranCorrection() {
         h(
           'select',
           {
-            'aria-label': 'Couleur des points',
+            'aria-label': t('correction.couleur_points'),
             onchange: (e: Event) => {
               modeCouleurPlan = (e.target as HTMLSelectElement).value as typeof modeCouleurPlan;
               dessinerPlan(filtresCourants);
             },
           },
-          h('option', { value: 'alertes', selected: modeCouleurPlan === 'alertes' }, 'Couleur : alertes'),
-          colEnq && h('option', { value: 'enqueteur', selected: modeCouleurPlan === 'enqueteur' }, 'Couleur : enquêteur'),
-          colDate && h('option', { value: 'date', selected: modeCouleurPlan === 'date' }, 'Couleur : journée'),
+          h('option', { value: 'alertes', selected: modeCouleurPlan === 'alertes' }, t('correction.couleur_alertes')),
+          colEnq && h('option', { value: 'enqueteur', selected: modeCouleurPlan === 'enqueteur' }, t('correction.couleur_enqueteur')),
+          colDate && h('option', { value: 'date', selected: modeCouleurPlan === 'date' }, t('correction.couleur_jour')),
         ),
         h(
           'span',
           { class: 'discret' },
-          `${points.length} ménage(s) sur le plan${sansPoint ? `, ${sansPoint} sans coordonnées` : ''}${ids.length > MAX_POINTS_PLAN ? ` (limité aux ${MAX_POINTS_PLAN} premiers)` : ''}`,
+          t('correction.sur_plan', { n: points.length }) + (sansPoint ? t('correction.sans_coordonnees', { n: sansPoint }) : '') + (ids.length > MAX_POINTS_PLAN ? t('correction.limite', { n: MAX_POINTS_PLAN }) : ''),
         ),
         h('span', { class: 'espace' }),
-        bouton('Zone pour un fond de carte…', () => {
+        bouton(t('correction.zone_fond'), () => {
           // Emprise de TOUS les ménages géolocalisés, élargie et arrondie : elle ne révèle que la région.
           const pts = tous.map((id) => pointMenage(id, colGps)).filter((x): x is NonNullable<typeof x> => !!x);
-          if (!pts.length) return notifier('Aucun ménage n’a de coordonnées GPS.', 'erreur');
+          if (!pts.length) return notifier(t('correction.aucune_coordonnee'), 'erreur');
           const z = zoneArrondie(pts);
           telecharger('zone_fond_de_carte.geojson', zoneEnGeoJson(z), 'application/geo+json');
           const lat = (x: number) => `${Math.abs(x)}° ${x < 0 ? 'S' : 'N'}`;
-          const lon = (x: number) => `${Math.abs(x)}° ${x < 0 ? 'O' : 'E'}`;
-          notifier(`Zone téléchargée (${lon(z.ouest)} à ${lon(z.est)}, ${lat(z.sud)} à ${lat(z.nord)}). Importez-la dans le HOT Export Tool (« Import »), puis chargez ici le fichier obtenu.`, 'succes');
+          const lon = (x: number) => `${Math.abs(x)}° ${x < 0 ? t('correction.ouest') : 'E'}`;
+          notifier(t('correction.zone_telechargee', { ouest: lon(z.ouest), est: lon(z.est), sud: lat(z.sud), nord: lat(z.nord) }), 'succes');
         }),
         fond
           ? [
               h(
                 'span',
-                { class: 'discret', title: fond.vecteur ? 'Fond vectoriel (GeoJSON)' : `Niveaux de zoom : ${fond.zooms.join(', ')}` },
-                `Fond : ${fond.nom} (${fond.nombre} ${fond.vecteur ? 'éléments' : 'tuiles'})`,
+                { class: 'discret', title: fond.vecteur ? t('correction.fond_vecteur') : t('correction.niveaux_zoom', { zooms: fond.zooms.join(', ') }) },
+                t(fond.vecteur ? 'correction.fond_elements' : 'correction.fond_tuiles', { nom: fond.nom, n: fond.nombre }),
               ),
-              bouton('Retirer le fond', () => (retirerFond(), dessinerPlan(filtresCourants))),
+              bouton(t('correction.retirer_fond'), () => (retirerFond(), dessinerPlan(filtresCourants))),
             ]
-          : bouton('Charger un fond de carte…', async () => {
+          : bouton(t('correction.charger_fond'), async () => {
               const f = await choisirFichier('.zip,.geojson,.json,application/zip,application/geo+json');
               if (!f) return;
-              await occupe('Lecture du fond de carte…', async () => {
+              await occupe(t('correction.lecture_fond'), async () => {
                 const c = await chargerFond(f.nom, f.octets as Uint8Array<ArrayBuffer>);
                 notifier(
                   c.vecteur
-                    ? `Fond de carte chargé : ${c.nombre} éléments (routes, rivières, lieux…). Il reste sur ce poste, pour cette séance.`
-                    : `Fond de carte chargé : ${c.nombre} tuiles, zoom ${c.zooms[0]} à ${c.zooms.at(-1)}. Il reste sur ce poste, pour cette séance.`,
+                    ? t('correction.fond_charge_vecteur', { n: c.nombre })
+                    : t('correction.fond_charge_tuiles', { n: c.nombre, de: c.zooms[0], a: c.zooms.at(-1) ?? '' }),
                   'succes',
                 );
                 dessinerPlan(filtresCourants);
@@ -609,7 +610,7 @@ export function ecranCorrection() {
         surVue: (v) => (vuePlan = { cle, vue: v }),
       }),
       h('div', { class: 'legende-plan' }, legende.map(([c, l]) => h('span', null, h('i', { class: 'pastille-couleur', 'data-couleur': c }), l))),
-      h('p', { class: 'aide' }, 'Molette : zoomer · glisser : déplacer · clic sur un point : ouvrir la fiche. Les ménages cochés et le ménage ouvert sont entourés.', colLien ? ` Les traits violets relient chaque ménage au ménage qu’il désigne (« ${colLien} »).` : ''),
+      h('p', { class: 'aide' }, t('correction.aide_plan'), colLien ? t('correction.aide_liens', { colonne: colLien }) : ''),
     );
     // Couleurs de la légende : appliquées par le DOM (pas d'attribut style, interdit par la politique de sécurité).
     zonePlan.querySelectorAll<HTMLElement>('.pastille-couleur').forEach((el) => el.style.setProperty('--c', el.dataset.couleur!));
@@ -621,9 +622,9 @@ export function ecranCorrection() {
     const ligne = h(
       'div',
       { class: `statut-menage${exclu ? ' exclu' : ''}` },
-      h('span', null, 'Statut : ', h('strong', null, exclu ? 'exclu de la liste finale' : 'inclus')),
-      attente && badge('changement en attente', 'attente'),
-      peutCorriger && !attente && bouton(exclu ? 'Proposer la réintégration' : 'Proposer l’exclusion', () => formulaireCorrection(id, CHAMP_STATUT, ligne, dessinerFiche)),
+      h('span', null, tr(exclu ? 'correction.statut_exclu' : 'correction.statut_inclus')),
+      attente && badge(t('correction.changement_attente'), 'attente'),
+      peutCorriger && !attente && bouton(exclu ? t('correction.proposer_reintegration') : t('correction.proposer_exclusion'), () => formulaireCorrection(id, CHAMP_STATUT, ligne, dessinerFiche)),
     );
     return ligne;
   }
@@ -639,18 +640,18 @@ export function ecranCorrection() {
     if (!hotes.length && !heberges.length && !problemes.length) return null;
     const lienVers = (m: string) => {
       const b = h('button', { type: 'button', class: 'lien', onclick: () => selectionner(m) }, m);
-      return etat!.estExclu(m) ? h('del', { title: 'Ménage exclu' }, b) : b;
+      return etat!.estExclu(m) ? h('del', { title: t('correction.menage_exclu') }, b) : b;
     };
     const inclus = heberges.filter((m) => !etat!.estExclu(m));
     const groupe = [id, ...hotes, ...heberges];
     return h(
       'div',
       { class: 'liens-menage' },
-      hotes.length > 0 && h('div', null, h('strong', null, hotes.length > 1 ? 'Rattaché à plusieurs ménages : ' : 'Rattaché à : '), hotes.map((m, i) => [i > 0 && ', ', lienVers(m)])),
+      hotes.length > 0 && h('div', null, h('strong', null, hotes.length > 1 ? t('correction.rattache_plusieurs') : t('correction.rattache')), hotes.map((m, i) => [i > 0 && ', ', lienVers(m)])),
       heberges.length > 0 &&
-        h('div', null, h('strong', null, `Ménages rattachés : ${heberges.length}`), ` (${inclus.length} inclus) : `, heberges.map((m, i) => [i > 0 && ', ', lienVers(m)])),
-      problemes.length > 0 && h('div', { class: 'avertissement' }, `⚠ ${problemes.join(' ; ')}`),
-      groupe.length > 1 && h('div', { class: 'ligne' }, bouton(`Comparer les ${groupe.length} ménages liés`, () => comparer(groupe))),
+        h('div', null, h('strong', null, t('correction.menages_rattaches', { n: heberges.length })), t('correction.dont_inclus', { n: inclus.length }), heberges.map((m, i) => [i > 0 && ', ', lienVers(m)])),
+      problemes.length > 0 && h('div', { class: 'avertissement' }, `⚠ ${problemes.join(t('alerte.separateur'))}`),
+      groupe.length > 1 && h('div', { class: 'ligne' }, bouton(t('correction.comparer_lies', { n: groupe.length }), () => comparer(groupe))),
     );
   }
 
@@ -675,33 +676,33 @@ export function ecranCorrection() {
               'div',
               { class: 'autres-menages' },
               autres.length <= 8 && [
-                'Autre(s) ménage(s) : ',
+                t('correction.autres_menages'),
                 autres.map((m) => h('button', { type: 'button', class: 'lien', onclick: () => selectionner(m) }, m)),
               ],
-              bouton(`Comparer les ${a.menages.length} ménages côte à côte`, () => comparer(a.menages, a.id), 'principal'),
+              bouton(t('correction.comparer', { n: a.menages.length }), () => comparer(a.menages, a.id), 'principal'),
             ),
-          d ? badge(DECISIONS_ALERTE[d.contenu.categorie][d.contenu.decision], 'ok') : badge('sans décision', 'attente'),
+          d ? badge(DECISIONS_ALERTE[d.contenu.categorie][d.contenu.decision], 'ok') : badge(t('commun.sans_decision'), 'attente'),
           d && h('span', { class: 'discret' }, ` ${nomAuteur(d.auteur)}`),
           peutDecider() && formulaireDecision(a, id),
         );
       }),
-      h('li', { class: 'lien-alertes' }, h('button', { type: 'button', class: 'lien', onclick: () => allerValidation('alerte') }, 'Voir toutes les alertes (écran Validation)')),
+      h('li', { class: 'lien-alertes' }, h('button', { type: 'button', class: 'lien', onclick: () => allerValidation('alerte') }, t('correction.voir_alertes'))),
     );
   }
 
   function dessinerFiche() {
     const id = session.menageSelectionne;
     if (!id || !etat!.indexMenages.has(id)) {
-      remplacer(zoneFiche, h('p', { class: 'vide' }, 'Cliquez sur un ménage dans le tableau pour afficher sa fiche ici.'));
+      remplacer(zoneFiche, h('p', { class: 'vide' }, t('correction.cliquez')));
       return;
     }
     const historique = historiqueMenage(id);
     remplacer(
       zoneFiche,
-      h('h2', null, `Ménage ${id}`),
+      h('h2', null, t('correction.menage', { id })),
       peutCorriger
-        ? h('p', { class: 'aide' }, 'Pour corriger une valeur, cliquez « Corriger » à côté du champ. Chaque correction attend la validation d’une autre personne.')
-        : encadre('info', 'Lecture seule : vous n’avez pas le rôle « Correction » dans cette liste.'),
+        ? h('p', { class: 'aide' }, t('correction.aide_fiche'))
+        : encadre('info', t('correction.lecture_seule')),
       ligneStatut(id),
       blocLiens(id),
       blocAlertes(id),
@@ -723,10 +724,10 @@ export function ecranCorrection() {
               h(
                 'dd',
                 null,
-                h('span', { class: 'valeur' }, valeur || h('span', { class: 'discret' }, '(vide)')),
-                valeur !== origine && h('del', { class: 'origine', title: 'Valeur de l’original' }, origine || '(vide)'),
-                attente && badge('en attente', 'attente'),
-                peutCorriger && c !== o.colonneId && !attente && bouton('Corriger', () => formulaireCorrection(id, c, ligne, dessinerFiche)),
+                h('span', { class: 'valeur' }, valeur || h('span', { class: 'discret' }, t('commun.vide'))),
+                valeur !== origine && h('del', { class: 'origine', title: t('correction.valeur_origine') }, origine || t('commun.vide')),
+                attente && badge(t('correction.en_attente'), 'attente'),
+                peutCorriger && c !== o.colonneId && !attente && bouton(t('commun.corriger'), () => formulaireCorrection(id, c, ligne, dessinerFiche)),
               ),
             );
             return ligne;
@@ -735,8 +736,8 @@ export function ecranCorrection() {
         h(
           'div',
           null,
-          h('h3', null, 'Historique des corrections'),
-          historique.length ? h('ul', { class: 'liste-historique' }, historique.map(ligneHistorique)) : h('p', { class: 'discret' }, 'Aucune correction.'),
+          h('h3', null, t('correction.historique')),
+          historique.length ? h('ul', { class: 'liste-historique' }, historique.map(ligneHistorique)) : h('p', { class: 'discret' }, t('correction.aucune')),
         ),
       ),
     );
@@ -747,8 +748,8 @@ export function ecranCorrection() {
     class: 'separateur',
     role: 'separator',
     'aria-orientation': 'horizontal',
-    'aria-label': 'Ajuster la hauteur du tableau',
-    title: 'Glisser pour agrandir le tableau ou la fiche',
+    'aria-label': t('correction.ajuster'),
+    title: t('correction.glisser'),
     tabindex: 0,
     onkeydown: (e: KeyboardEvent) => {
       if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -778,9 +779,9 @@ export function ecranCorrection() {
 
   const recherche = h('input', {
     type: 'search',
-    placeholder: 'Rechercher dans tous les champs (identifiant, nom, téléphone…)',
+    placeholder: t('correction.rechercher_placeholder'),
     value: vue.recherche,
-    'aria-label': 'Rechercher',
+    'aria-label': t('correction.rechercher'),
     oninput: (e: Event) => {
       vue.recherche = (e.target as HTMLInputElement).value;
       vue.page = 0;
@@ -791,12 +792,12 @@ export function ecranCorrection() {
   dessinerTable();
   dessinerFiche();
   return [
-    h('h1', null, 'Correction'),
+    h('h1', null, t('nav.correction')),
     h(
       'div',
       { class: 'barre-outils' },
       recherche,
-      bouton('Réinitialiser filtres et tri', () => {
+      bouton(t('commun.reinitialiser'), () => {
         vue.filtres = {};
         vue.tri = null;
         vue.recherche = '';
@@ -841,29 +842,29 @@ function barreExclusion(cochés: () => string[]) {
   const compteur = h('strong');
   const motif = h(
     'select',
-    { 'aria-label': 'Motif de l’exclusion groupée' },
-    h('option', { value: '' }, '— Motif de l’exclusion —'),
-    MOTIFS_EXCLUSION.map((m) => h('option', { value: m }, m)),
+    { 'aria-label': t('correction.motif_groupe') },
+    h('option', { value: '' }, t('correction.motif_exclusion')),
+    MOTIFS_EXCLUSION.map((m) => h('option', { value: m }, libelleMotif(m))),
   );
-  const commentaire = h('input', { type: 'text', placeholder: 'Commentaire (obligatoire, commun)', 'aria-label': 'Commentaire de l’exclusion groupée' });
-  const exclure = bouton('Proposer l’exclusion', () => {
+  const commentaire = h('input', { type: 'text', placeholder: t('correction.commentaire_groupe'), 'aria-label': t('correction.commentaire_groupe_label') });
+  const exclure = bouton(t('correction.proposer_exclusion'), () => {
     const ids = cochés();
     const cibles = ids.filter((id) => !etat.estExclu(id) && !etat.enAttenteParCellule.has(cellule(id, CHAMP_STATUT)));
     const ignores = ids.length - cibles.length;
-    if (!cibles.length) return notifier('Aucun des ménages cochés ne peut être exclu : ils sont déjà exclus ou un changement de statut est déjà en attente.', 'erreur');
-    if (!motif.value) return notifier('Choisissez un motif.', 'erreur');
+    if (!cibles.length) return notifier(t('correction.aucun_excluable'), 'erreur');
+    if (!motif.value) return notifier(t('correction.choisir_motif'), 'erreur');
     if (!commentaire.value.trim()) {
       commentaire.focus();
-      return notifier('Expliquez la raison en commentaire.', 'erreur');
+      return notifier(t('correction.expliquer'), 'erreur');
     }
     if (
       !confirm(
-        `Proposer l’exclusion de ${cibles.length} ménage(s)${ignores ? ` (${ignores} ignoré(s) : déjà exclus ou changement en attente)` : ''} ? Chaque proposition sera inscrite séparément au journal et devra être validée par une autre personne.`,
+        t(ignores ? 'correction.confirmer_exclusion_ignores' : 'correction.confirmer_exclusion', { n: cibles.length, ignores }),
       )
     ) {
       return;
     }
-    occupe(`Signature de ${cibles.length} proposition(s)…`, async () => {
+    occupe(t('correction.signature_propositions', { n: cibles.length }), async () => {
       for (const id of cibles) {
         await corriger(session.liste!, etat, session.identite!, {
           menage: id,
@@ -876,7 +877,7 @@ function barreExclusion(cochés: () => string[]) {
         coches.delete(id);
       }
       panneauExclusionOuvert = false;
-      notifier(`${cibles.length} exclusion(s) proposée(s). Elles attendent la validation d’une autre personne.`, 'succes');
+      notifier(t('correction.exclusions_proposees', { n: cibles.length }), 'succes');
       await apresModification();
     });
   }, 'danger');
@@ -884,36 +885,36 @@ function barreExclusion(cochés: () => string[]) {
   const panneau = h(
     'div',
     { class: 'barre-groupe statique compacte', hidden: !panneauExclusionOuvert },
-    h('span', { class: 'titre-barre' }, 'Exclusion en lot'),
+    h('span', { class: 'titre-barre' }, t('correction.exclusion_lot')),
     compteur,
     motif,
     commentaire,
     exclure,
-    bouton('Fermer', () => {
+    bouton(t('commun.fermer'), () => {
       panneauExclusionOuvert = false;
       panneau.hidden = true;
     }),
     h(
       'p',
       { class: 'aide' },
-      'Chaque exclusion devra être validée par une autre personne. Pour une simple visite terrain, n’excluez pas : décidez « À vérifier sur le terrain » sur les alertes (écran Validation).',
+      t('correction.aide_exclusion'),
     ),
   );
-  const ouvrir = bouton('Exclure…', () => {
+  const ouvrir = bouton(t('correction.exclure'), () => {
     panneauExclusionOuvert = !panneauExclusionOuvert;
     panneau.hidden = !panneauExclusionOuvert;
     if (panneauExclusionOuvert) motif.focus();
   }, 'danger');
-  ouvrir.title = 'Proposer l’exclusion des ménages cochés';
+  ouvrir.title = t('correction.exclure_titre');
   return {
     ouvrir,
     panneau,
     maj: () => {
       const n = cochés().length;
-      compteur.textContent = `${n} ménage(s) coché(s)`;
-      exclure.textContent = n ? `Proposer l’exclusion de ${n} ménage(s)` : 'Proposer l’exclusion';
+      compteur.textContent = t('correction.coches', { n });
+      exclure.textContent = n ? t('correction.proposer_exclusion_n', { n }) : t('correction.proposer_exclusion');
       exclure.toggleAttribute('disabled', n === 0);
-      ouvrir.textContent = n ? `Exclure les ${n} cochés…` : 'Exclure…';
+      ouvrir.textContent = n ? t('correction.exclure_n', { n }) : t('correction.exclure');
       ouvrir.toggleAttribute('disabled', n === 0);
       if (n === 0) {
         panneauExclusionOuvert = false;
@@ -940,27 +941,27 @@ function panneauVisite(cochés: () => string[], aVerifier: (id: string) => strin
   const o = session.liste!.original;
   const choix = new Map<string, HTMLInputElement>();
   const proposees = o.colonnes.filter((c) => c !== o.colonneId && !COLONNES_TECHNIQUES.test(c));
-  for (const c of [colDate, ...proposees].filter((c, i, t) => c && t.indexOf(c) === i)) {
+  for (const c of [colDate, ...proposees].filter((c, i, tous) => c && tous.indexOf(c) === i)) {
     choix.set(c, h('input', { type: 'checkbox', checked: COLONNES_UTILES.test(c) || c === colEnq || c === colDate }));
   }
   const format = h(
     'select',
-    { 'aria-label': 'Format de la liste de visite', onchange: () => (memoFormatVisite = format.value) },
+    { 'aria-label': t('visite.format'), onchange: () => (memoFormatVisite = format.value) },
     // Kobo d'abord : réponses contrôlées, preuve de visite et retour automatique dans 2x2.
-    h('option', { value: 'kobo', selected: memoFormatVisite === 'kobo' }, `Préchargement Kobo (${NOM_PRECHARGEMENT})`),
-    h('option', { value: 'xlsx', selected: memoFormatVisite === 'xlsx' }, 'Liste à imprimer : tableur XLSX (Excel)'),
-    h('option', { value: 'ods', selected: memoFormatVisite === 'ods' }, 'Liste à imprimer : tableur ODS (LibreOffice)'),
-    h('option', { value: 'csv', selected: memoFormatVisite === 'csv' }, 'Liste : CSV'),
+    h('option', { value: 'kobo', selected: memoFormatVisite === 'kobo' }, t('visite.format_kobo', { fichier: NOM_PRECHARGEMENT })),
+    h('option', { value: 'xlsx', selected: memoFormatVisite === 'xlsx' }, t('visite.format_xlsx')),
+    h('option', { value: 'ods', selected: memoFormatVisite === 'ods' }, t('visite.format_ods')),
+    h('option', { value: 'csv', selected: memoFormatVisite === 'csv' }, t('visite.format_csv')),
   );
   // Étiquette de chaque ménage dans la liste de choix du formulaire Kobo : 2 ou 3 colonnes, au choix,
   // pré-remplies par la détection (nom du chef de ménage, village). Toujours précédées de l'identifiant.
   const detectees = detecterColonnes(o.colonnes);
-  const proposeesEtiquette = [colDate, ...proposees].filter((c, i, t) => c && t.indexOf(c) === i);
+  const proposeesEtiquette = [colDate, ...proposees].filter((c, i, tous) => c && tous.indexOf(c) === i);
   const selecteurEtiquette = (n: number, defaut?: string) => {
     if (memoEtiquette[n] === undefined) memoEtiquette[n] = defaut ?? '';
     const sel = h(
       'select',
-      { 'aria-label': `Étiquette Kobo, colonne ${n + 1}`, onchange: () => (memoEtiquette[n] = sel.value) },
+      { 'aria-label': t('visite.etiquette', { n: n + 1 }), onchange: () => (memoEtiquette[n] = sel.value) },
       h('option', { value: '' }, '—'),
       proposeesEtiquette.map((c) => h('option', { value: c, selected: c === memoEtiquette[n] }, c)),
     );
@@ -970,52 +971,51 @@ function panneauVisite(cochés: () => string[], aVerifier: (id: string) => strin
   const zoneEtiquette = h(
     'div',
     { class: 'ligne etiquette-kobo' },
-    h('span', null, 'Affiché dans la liste Kobo : identifiant –'),
+    h('span', null, t('visite.affiche')),
     etiquettes.flatMap((e, i) => (i ? [' – ', e] : [e])),
-    h('span', { class: 'aide' }, 'La liste est triée selon ces colonnes, dans cet ordre (ex. village puis nom).'),
+    h('span', { class: 'aide' }, t('visite.tri')),
   );
   const majFormat = () => (zoneEtiquette.hidden = format.value !== 'kobo');
   format.addEventListener('change', majFormat);
   format.classList.add('format-visite');
   majFormat();
   const compteur = h('strong');
-  const exporter = bouton('Exporter', () => {
+  const exporter = bouton(t('visite.exporter'), () => {
     const ids = cochés();
     const kobo = format.value === 'kobo';
-    const etiquette = kobo ? etiquettes.map((e) => e.value).filter((c, i, t) => c && t.indexOf(c) === i) : [];
+    const etiquette = kobo ? etiquettes.map((e) => e.value).filter((c, i, tous) => c && tous.indexOf(c) === i) : [];
     // Les colonnes de l'étiquette sortent de l'outil : elles font partie des colonnes exportées (et journalisées).
     const colonnes = [...new Set([...[...choix].filter(([, c]) => c.checked).map(([nom]) => nom), ...etiquette])];
-    if (!ids.length) return notifier('Cochez d’abord des ménages.', 'erreur');
-    if (kobo && !etiquette.length) return notifier('Choisissez au moins une colonne à afficher dans la liste Kobo (par exemple le nom et le village).', 'erreur');
+    if (!ids.length) return notifier(t('visite.cochez'), 'erreur');
+    if (kobo && !etiquette.length) return notifier(t('visite.etiquette_vide'), 'erreur');
     if (
       !confirm(
-        `Ce fichier contiendra en clair ${ids.length} ménage(s) et les colonnes : ${[o.colonneId, ...colonnes].join(', ')}.\n\n` +
-          'Transmettez-le par un canal sûr et supprimez-le après la mission. L’export sera inscrit au journal. Continuer ?',
+        t('visite.confirmer', { n: ids.length, colonnes: [o.colonneId, ...colonnes].join(', ') }),
       )
     ) {
       return;
     }
-    occupe('Préparation de la liste…', async () => {
+    occupe(t('visite.preparation'), async () => {
       const d = { ids, colonnes, etiquette, aVerifier: new Map(ids.map((id) => [id, aVerifier(id)])) };
       const f = await exporterVisite(session.liste!, session.etat!, session.identite!, d, kobo ? 'kobo' : 'visite', (kobo ? 'csv' : format.value) as FormatExport);
       telecharger(f.nomFichier, f.octets, f.type);
       panneauVisiteOuvert = false;
-      notifier(`${kobo ? 'Fichier de préchargement exporté' : 'Liste de visite exportée'} (${ids.length} ménage(s)), inscription au journal faite.`, 'succes');
+      notifier(t(kobo ? 'visite.exporte_kobo' : 'visite.exporte', { n: ids.length }), 'succes');
       await apresModification();
     });
   }, 'principal');
   const panneau = h(
     'div',
     { class: 'carte panneau-visite', hidden: !panneauVisiteOuvert },
-    h('div', { class: 'ligne' }, h('span', { class: 'titre-barre neutre' }, 'Liste de visite terrain'), compteur),
-    h('p', { class: 'aide' }, 'Colonnes à inclure (l’identifiant est toujours inclus). Ne cochez que ce qu’il faut pour retrouver et joindre le ménage.'),
+    h('div', { class: 'ligne' }, h('span', { class: 'titre-barre neutre' }, t('visite.titre')), compteur),
+    h('p', { class: 'aide' }, t('visite.colonnes')),
     h(
       'div',
       { class: 'choix-colonnes' },
-      [...choix].map(([nom, c]) => h('label', { class: 'case' }, c, nom === colDate ? `${nom} (date)` : nom === colEnq ? `${nom} (enquêteur)` : nom)),
+      [...choix].map(([nom, c]) => h('label', { class: 'case' }, c, nom === colDate ? t('visite.col_date', { nom }) : nom === colEnq ? t('visite.col_enqueteur', { nom }) : nom)),
     ),
-    h('p', { class: 'aide' }, `Ajoutées automatiquement : « À vérifier » (les alertes du ménage) et, pour la liste de visite, des colonnes à remplir sur place : ${COLONNES_RETOUR.join(', ')}.`),
-    encadre('alerte', 'Ce fichier fait sortir des données personnelles en clair. Transmettez-le par un canal sûr, gardez-le le moins longtemps possible et supprimez-le après la mission.'),
+    h('p', { class: 'aide' }, t('visite.ajoutees', { colonnes: COLONNES_RETOUR.join(', ') })),
+    encadre('alerte', t('visite.avertissement')),
     h(
       'div',
       { class: 'ligne' },
@@ -1026,12 +1026,12 @@ function panneauVisite(cochés: () => string[], aVerifier: (id: string) => strin
     h(
       'div',
       { class: 'ligne' },
-      bouton('Formulaire Kobo de revisite (XLSForm)', async () => {
+      bouton(t('visite.formulaire'), async () => {
         const corrigeables = o.colonnes.filter((c) => c !== o.colonneId && !COLONNES_TECHNIQUES.test(c));
         telecharger('formulaire_revisite_2x2.xlsx', await ecrireXlsx(formulaireRevisite(corrigeables)), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        notifier(`Formulaire téléchargé. Dans KoboToolbox : importez-le, ajoutez ${NOM_PRECHARGEMENT} en pièce jointe (média), puis déployez.`, 'succes');
+        notifier(t('visite.formulaire_telecharge', { fichier: NOM_PRECHARGEMENT }), 'succes');
       }),
-      bouton('Fermer', () => {
+      bouton(t('commun.fermer'), () => {
         panneauVisiteOuvert = false;
         panneau.hidden = true;
       }),
@@ -1039,23 +1039,23 @@ function panneauVisite(cochés: () => string[], aVerifier: (id: string) => strin
     h(
       'p',
       { class: 'aide' },
-      `Avec Kobo : exportez « Préchargement Kobo », téléchargez le formulaire de revisite (il ne contient aucune donnée), importez-le dans KoboToolbox avec ${NOM_PRECHARGEMENT} comme pièce jointe. Après la mission, importez l’export des réponses avec « Retours du terrain… ».`,
+      t('visite.aide_kobo', { fichier: NOM_PRECHARGEMENT }),
     ),
   );
-  const ouvrir = bouton('Liste de visite…', () => {
+  const ouvrir = bouton(t('visite.ouvrir'), () => {
     panneauVisiteOuvert = !panneauVisiteOuvert;
     panneau.hidden = !panneauVisiteOuvert;
   });
-  ouvrir.title = 'Exporter les ménages cochés pour une visite ou un appel (tableur ou préchargement Kobo)';
+  ouvrir.title = t('visite.ouvrir_titre');
   return {
     ouvrir,
     panneau,
     maj: () => {
       const n = cochés().length;
-      compteur.textContent = `${n} ménage(s) coché(s)`;
-      ouvrir.textContent = n ? `Liste de visite (${n})…` : 'Liste de visite…';
+      compteur.textContent = t('correction.coches', { n });
+      ouvrir.textContent = n ? t('visite.ouvrir_n', { n }) : t('visite.ouvrir');
       ouvrir.toggleAttribute('disabled', n === 0);
-      exporter.textContent = n ? `Exporter ${n} ménage(s)` : 'Exporter';
+      exporter.textContent = n ? t('visite.exporter_n', { n }) : t('visite.exporter');
       exporter.toggleAttribute('disabled', n === 0);
       if (n === 0) {
         panneauVisiteOuvert = false;
@@ -1068,7 +1068,7 @@ function panneauVisite(cochés: () => string[], aVerifier: (id: string) => strin
 /** Retours du terrain importés (export des réponses du formulaire de revisite), en attente de signature. */
 let retoursEnCours: { nom: string; actions: ActionRetour[]; erreurs: string[]; reponses: number; coches: Set<string> } | undefined;
 
-const LIBELLES_NATURE_RETOUR: Record<ActionRetour['nature'], string> = { correction: 'Correction', exclusion: 'Exclusion', decision: 'Décision d’alerte' };
+const LIBELLES_NATURE_RETOUR: Record<ActionRetour['nature'], string> = libelles({ correction: 'journal.t_correction', exclusion: 'retours.exclusion', decision: 'retours.decision' });
 
 /**
  * Import des retours du terrain : l'outil lit l'export Kobo des réponses et PROPOSE des actions.
@@ -1092,8 +1092,8 @@ function panneauRetours() {
     const n = signables.filter((a) => r.coches.has(a.cle)).length;
     remplacer(
       panneau,
-      h('div', { class: 'ligne' }, h('span', { class: 'titre-barre neutre' }, 'Retours du terrain'), h('strong', null, r.nom), h('span', { class: 'discret' }, `${r.reponses} réponse(s), ${r.actions.length} action(s) proposée(s)`)),
-      r.erreurs.length > 0 && encadre('alerte', h('strong', null, `${r.erreurs.length} réponse(s) non exploitée(s) :`), h('ul', null, r.erreurs.slice(0, 20).map((e) => h('li', null, e)))),
+      h('div', { class: 'ligne' }, h('span', { class: 'titre-barre neutre' }, t('retours.titre')), h('strong', null, r.nom), h('span', { class: 'discret' }, t('retours.resume', { n: r.reponses, actions: r.actions.length }))),
+      r.erreurs.length > 0 && encadre('alerte', h('strong', null, t('retours.erreurs', { n: r.erreurs.length })), h('ul', null, r.erreurs.slice(0, 20).map((e) => h('li', null, e)))),
       r.actions.length
         ? h(
             'div',
@@ -1101,12 +1101,12 @@ function panneauRetours() {
             h(
               'table',
               { class: 'tableau retours' },
-              h('thead', null, h('tr', null, ['', 'Ménage', 'Action', 'Détail', 'Source', 'À noter'].map((t) => h('th', null, t)))),
+              h('thead', null, h('tr', null, ['', t('retours.col_menage'), t('retours.col_action'), t('validation.col_detail'), t('retours.col_source'), t('retours.col_noter')].map((x) => h('th', null, x)))),
               h(
                 'tbody',
                 null,
                 r.actions.map((a) => {
-                  const bloque = a.impossible ?? (autorise(a) ? '' : a.nature === 'decision' ? 'Il faut le rôle « Validation » ou « Responsable ».' : 'Il faut le rôle « Correction ».');
+                  const bloque = a.impossible ?? (autorise(a) ? '' : a.nature === 'decision' ? t('validation.role_decider') : t('retours.role_correction'));
                   return h(
                     'tr',
                     { class: `${bloque ? 'bloquee' : ''}${a.avertissement ? ' a-verifier' : ''}` },
@@ -1118,7 +1118,7 @@ function panneauRetours() {
                         checked: !bloque && r.coches.has(a.cle),
                         disabled: !!bloque,
                         title: bloque || undefined,
-                        'aria-label': `Retenir : ${a.menage} ${a.resume}`,
+                        'aria-label': t('retours.retenir', { menage: a.menage, resume: a.resume }),
                         onchange: (e: Event) => {
                           (e.target as HTMLInputElement).checked ? r.coches.add(a.cle) : r.coches.delete(a.cle);
                           dessiner();
@@ -1127,7 +1127,7 @@ function panneauRetours() {
                     ),
                     h('td', null, a.menage),
                     h('td', null, badge(LIBELLES_NATURE_RETOUR[a.nature], a.nature === 'decision' ? 'neutre' : a.nature === 'exclusion' ? 'refus' : 'attente')),
-                    h('td', null, a.resume, a.motif && a.nature !== 'correction' ? h('div', { class: 'discret' }, `Motif : ${a.motif}`) : ''),
+                    h('td', null, a.resume, a.motif && a.nature !== 'correction' ? h('div', { class: 'discret' }, t('retours.motif', { motif: libelleMotif(a.motif) })) : ''),
                     h('td', { class: 'discret' }, a.commentaire),
                     h('td', null, bloque && h('div', { class: 'discret' }, bloque), a.avertissement && h('div', { class: 'avertissement' }, `⚠ ${a.avertissement}`)),
                   );
@@ -1135,17 +1135,17 @@ function panneauRetours() {
               ),
             ),
           )
-        : h('p', { class: 'discret' }, 'Aucune action à proposer.'),
+        : h('p', { class: 'discret' }, t('retours.aucune')),
       h(
         'p',
         { class: 'aide' },
-        'Les actions marquées ⚠ (visite loin du ménage ou sans position) ne sont pas cochées : vérifiez-les avant de les retenir. Les corrections et exclusions signées attendront la validation d’une autre personne.',
+        t('retours.aide'),
       ),
       h(
         'div',
         { class: 'ligne' },
-        bouton(n ? `Signer ${n} action(s)` : 'Signer', () => signer(signables.filter((a) => r.coches.has(a.cle))), 'principal', n === 0),
-        bouton('Abandonner ces retours', () => {
+        bouton(n ? t('retours.signer_n', { n }) : t('commun.signer'), () => signer(signables.filter((a) => r.coches.has(a.cle))), 'principal', n === 0),
+        bouton(t('retours.abandonner'), () => {
           retoursEnCours = undefined;
           dessiner();
         }),
@@ -1155,8 +1155,8 @@ function panneauRetours() {
 
   function signer(choisies: ActionRetour[]) {
     if (!choisies.length) return;
-    if (!confirm(`Signer ${choisies.length} action(s) issues des retours du terrain ? Chacune sera inscrite séparément au journal.`)) return;
-    occupe(`Signature de ${choisies.length} action(s)…`, async () => {
+    if (!confirm(t('retours.confirmer', { n: choisies.length }))) return;
+    occupe(t('retours.signature', { n: choisies.length }), async () => {
       const { liste, etat, identite } = session;
       let faites = 0;
       for (const a of choisies) {
@@ -1169,17 +1169,17 @@ function panneauRetours() {
         faites++;
       }
       retoursEnCours = undefined;
-      notifier(`${faites} action(s) signée(s) depuis les retours du terrain.`, 'succes');
+      notifier(t('retours.signees', { n: faites }), 'succes');
       await apresModification();
     });
   }
 
-  const ouvrir = bouton('Retours du terrain…', async () => {
+  const ouvrir = bouton(t('retours.ouvrir'), async () => {
     const f = await choisirFichier('.xlsx,.ods,.csv');
     if (!f) return;
-    await occupe('Lecture des retours du terrain…', async () => {
-      const t = await lireExport(f.octets, f.nom);
-      const r = lireRetours(t, session.etat!, alertesCourantes(), colonneGps());
+    await occupe(t('retours.lecture'), async () => {
+      const tab = await lireExport(f.octets, f.nom);
+      const r = lireRetours(tab, session.etat!, alertesCourantes(), colonneGps());
       retoursEnCours = {
         nom: f.nom,
         ...r,
@@ -1188,7 +1188,7 @@ function panneauRetours() {
       dessiner();
     });
   });
-  ouvrir.title = 'Importer l’export des réponses du formulaire Kobo de revisite : l’outil propose les corrections, exclusions et décisions correspondantes';
+  ouvrir.title = t('retours.ouvrir_titre');
   dessiner();
   return { ouvrir, panneau };
 }

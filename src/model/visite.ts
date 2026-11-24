@@ -14,6 +14,7 @@ import { ecrireXlsx, type FeuilleXlsx } from '../io/xlsx.ts';
 import { LARGEURS_META, tableauMetadonnees, type FichierExporte, type FormatExport } from './export.ts';
 import { journaliserExport, type Etat } from './journal.ts';
 import type { Liste } from './types.ts';
+import { t } from '../i18n/index.ts';
 
 /** Colonnes laissées vides, à remplir par l'équipe de terrain. */
 export const COLONNES_RETOUR = ['Date de visite', 'Ménage trouvé (oui/non)', 'Constat', 'Champ à corriger', 'Valeur constatée', 'Visité par'];
@@ -155,7 +156,7 @@ export async function exporterVisite(
   nature: 'visite' | 'kobo',
   format: FormatExport,
 ): Promise<FichierExporte> {
-  if (!d.ids.length) throw new Error('Aucun ménage choisi.');
+  if (!d.ids.length) throw new Error(t('err.aucun_menage'));
   const derniere = liste.journal.at(-1)!;
   const fichier = await construireVisite(liste, etat, d, nature, nature === 'kobo' ? 'csv' : format, identite.nom);
   await journaliserExport(liste, etat, identite, {

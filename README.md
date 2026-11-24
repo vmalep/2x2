@@ -15,7 +15,8 @@ Le nom : deux personnes, quatre yeux.
 npm install          # une seule fois (outils de développement)
 npm run build        # produit dist/2x2-vX.Y.Z.html : un fichier unique, autonome, hors ligne
 npm test             # tests automatisés (crypto, journal, ZIP/XLSX/CSV, générateur)
-npm run e2e          # parcours complet à deux personnes dans Chrome (après build)
+npm run e2e          # parcours complet à deux personnes dans Chrome (après build), en français puis en anglais
+                     # (LANGUES=en npm run e2e pour une seule langue)
 npm run fictif       # écrit un export Kobo fictif dans fictif/ (CSV, XLSX, vérité des anomalies)
 ```
 
@@ -39,6 +40,7 @@ npm run fictif       # écrit un export Kobo fictif dans fictif/ (CSV, XLSX, vé
 | `src/io/` | ZIP, XLSX, CSV, import d'un export Kobo |
 | `src/model/` | types, journal signé et chaîné (règles métier communes à l'ajout et à la vérification), fichier de liste chiffré |
 | `src/gen/` | générateur de données fictives avec anomalies plantées |
+| `src/i18n/` | textes de l'interface en français et en anglais (`t('clé', paramètres)`) |
 | `src/ui/` | interface (DOM construit sans `innerHTML`) |
 | `tests/`, `e2e/` | tests unitaires (Vitest) et parcours de bout en bout |
 
@@ -96,6 +98,14 @@ fichier chiffré (enregistrement direct sous Chrome/Edge, téléchargement aille
 - **Exports** : liste finale (CSV pour la plateforme de paiement, XLSX, ODS), verrouillée tant qu'il reste une correction en attente ou une alerte sans décision ;
   rapport des alertes et des corrections (XLSX, ODS) avec colonnes de décision à remplir, disponible à tout moment.
   Chaque export porte l'empreinte du journal et s'inscrit au journal avec sa propre empreinte : « Vérifier un fichier exporté » reconnaît un fichier authentique et rejette un fichier retouché.
+
+**Bilingue français / anglais (en cours, v0.15)** :
+- **Interface et aide intégrée** traduites ; sélecteur FR / EN dans l'en-tête. La langue de départ suit celle du navigateur
+  (français, sinon anglais) ; le choix est mémorisé dans ce navigateur.
+- **Données signées inchangées** : les motifs (« Erreur de saisie »…) et les codes de décision restent inscrits au journal sous leur
+  forme française d'origine, et ne sont traduits qu'à l'affichage ; les listes existantes s'ouvrent et se vérifient comme avant.
+  Les règles par défaut reçoivent un libellé dans la langue de l'utilisateur, sans changer leur nom (les identifiants d'alerte
+  et les décisions déjà prises restent rattachés) ; un fichier de règles importé garde ses propres libellés. Les commentaires restent tels qu'écrits.
 
 Hors périmètre du prototype : détection d'anomalies par apprentissage, import natif des plateformes de paiement, travail simultané.
 

@@ -7,6 +7,7 @@ import { signer, verifier, type IdentiteDeverrouillee } from '../crypto/cles.ts'
 import { depuisBase64, depuisUtf8, jsonCanonique, utf8, versBase64 } from '../crypto/encodage.ts';
 import { grouper } from '../crypto/empreinte.ts';
 import type { Liste, Utilisateur } from './types.ts';
+import { t } from '../i18n/index.ts';
 
 const PREFIXE = '2X2-RECU-1.';
 
@@ -51,16 +52,16 @@ export function recuEnTexte(r: Recu): string {
 
 export function lireRecu(texte: string): Recu {
   const debut = texte.indexOf(PREFIXE);
-  if (debut < 0) throw new Error('Aucun code de reçu 2x2 trouvé dans ce texte.');
+  if (debut < 0) throw new Error(t('err.recu_absent'));
   // Le code peut avoir été coupé sur plusieurs lignes par une messagerie : on retire les blancs.
   const code = /^[A-Za-z0-9+/=]+/.exec(texte.slice(debut + PREFIXE.length).replace(/\s+/g, ''))?.[0] ?? '';
   let r: Recu;
   try {
     r = JSON.parse(depuisUtf8(depuisBase64(code)));
   } catch {
-    throw new Error('Code de reçu illisible (texte tronqué ?).');
+    throw new Error(t('err.recu_illisible'));
   }
-  if (r?.format !== '2x2-recu' || r.version !== 1) throw new Error('Format de reçu non reconnu.');
+  if (r?.format !== '2x2-recu' || r.version !== 1) throw new Error(t('err.recu_format'));
   return r;
 }
 

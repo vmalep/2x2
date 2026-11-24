@@ -4,6 +4,7 @@
  */
 import { bouton } from './composants.ts';
 import { h } from './dom.ts';
+import { t } from '../i18n/index.ts';
 
 export interface OptionColonne {
   cle: string;
@@ -62,7 +63,7 @@ export function choixColonnes(cleStockage: string, options: OptionColonne[], def
   const panneau = h(
     'div',
     { class: 'carte panneau-colonnes', hidden: !ouverts.has(cleStockage) },
-    h('div', { class: 'ligne' }, h('span', { class: 'titre-barre neutre' }, 'Colonnes affichées'), h('span', { class: 'discret' }, 'Le choix est gardé dans ce navigateur, pour cette liste.')),
+    h('div', { class: 'ligne' }, h('span', { class: 'titre-barre neutre' }, t('colonnes.titre')), h('span', { class: 'discret' }, t('colonnes.garde'))),
     groupes.map((g) =>
       h(
         'fieldset',
@@ -78,7 +79,7 @@ export function choixColonnes(cleStockage: string, options: OptionColonne[], def
                 type: 'checkbox',
                 checked: set.has(o.cle),
                 disabled: !!o.obligatoire,
-                'aria-label': `Afficher la colonne ${o.libelle}`,
+                'aria-label': t('colonnes.afficher', { nom: o.libelle }),
                 onchange: (e: Event) => {
                   const l = ordre().filter((c) => c !== o.cle);
                   // Une colonne ajoutée se place à la fin ; on la déplace ensuite avec ↑ ↓.
@@ -91,11 +92,11 @@ export function choixColonnes(cleStockage: string, options: OptionColonne[], def
           ),
       ),
     ),
-    h('h3', { class: 'titre-ordre' }, 'Ordre des colonnes'),
+    h('h3', { class: 'titre-ordre' }, t('colonnes.ordre')),
     h(
       'ol',
       { class: 'ordre-colonnes' },
-      ordre().map((cle, i, t) =>
+      ordre().map((cle, i, tous) =>
         h(
           'li',
           null,
@@ -105,10 +106,10 @@ export function choixColonnes(cleStockage: string, options: OptionColonne[], def
             {
               type: 'button',
               class: 'bouton petit',
-              'aria-label': `Monter la colonne ${libelle.get(cle) ?? cle}`,
+              'aria-label': t('colonnes.monter', { nom: libelle.get(cle) ?? cle }),
               disabled: i === 0,
               onclick: () => {
-                const l = [...t];
+                const l = [...tous];
                 [l[i - 1], l[i]] = [l[i], l[i - 1]];
                 enregistrer(l);
               },
@@ -120,10 +121,10 @@ export function choixColonnes(cleStockage: string, options: OptionColonne[], def
             {
               type: 'button',
               class: 'bouton petit',
-              'aria-label': `Descendre la colonne ${libelle.get(cle) ?? cle}`,
-              disabled: i === t.length - 1,
+              'aria-label': t('colonnes.descendre', { nom: libelle.get(cle) ?? cle }),
+              disabled: i === tous.length - 1,
               onclick: () => {
-                const l = [...t];
+                const l = [...tous];
                 [l[i + 1], l[i]] = [l[i], l[i + 1]];
                 enregistrer(l);
               },
@@ -136,17 +137,17 @@ export function choixColonnes(cleStockage: string, options: OptionColonne[], def
     h(
       'div',
       { class: 'ligne' },
-      bouton('Colonnes par défaut', () => enregistrer(undefined)),
-      bouton('Fermer', () => {
+      bouton(t('colonnes.defaut'), () => enregistrer(undefined)),
+      bouton(t('commun.fermer'), () => {
         ouverts.delete(cleStockage);
         panneau.hidden = true;
       }),
     ),
   );
-  const ouvrir = bouton('Colonnes…', () => {
+  const ouvrir = bouton(t('colonnes.ouvrir'), () => {
     ouverts.has(cleStockage) ? ouverts.delete(cleStockage) : ouverts.add(cleStockage);
     panneau.hidden = !ouverts.has(cleStockage);
   });
-  ouvrir.title = 'Choisir les colonnes affichées dans le tableau';
+  ouvrir.title = t('colonnes.ouvrir_titre');
   return { visibles, ouvrir, panneau };
 }

@@ -7,6 +7,7 @@ import { normaliser, type Tableau } from './tableau.ts';
 import type { FeuilleXlsx } from './xlsx.ts';
 import { attribut, decoderEntites, echapperXml } from './xml.ts';
 import { ecrireZip, lireZip } from './zip.ts';
+import { t } from '../i18n/index.ts';
 
 const NS =
   'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" ' +
@@ -89,11 +90,11 @@ export async function lireOds(octets: Octets): Promise<Tableau> {
   const fichiers = await lireZip(octets);
   const mime = fichiers.get('mimetype');
   if (!mime || new TextDecoder().decode(mime).trim() !== 'application/vnd.oasis.opendocument.spreadsheet') {
-    throw new Error('Fichier ODS invalide (classeur OpenDocument attendu).');
+    throw new Error(t('err.ods'));
   }
   const contenu = new TextDecoder().decode(fichiers.get('content.xml') ?? new Uint8Array());
   const table = /<table:table\b[^>]*>([\s\S]*?)<\/table:table>/.exec(contenu)?.[1];
-  if (table === undefined) throw new Error('Aucune feuille trouvée dans le fichier ODS.');
+  if (table === undefined) throw new Error(t('err.ods_feuille'));
   const lignes: string[][] = [];
   for (const mLigne of table.matchAll(/<table:table-row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/table:table-row>)/g)) {
     const ligne: string[] = [];

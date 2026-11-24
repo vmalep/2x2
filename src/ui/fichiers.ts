@@ -1,5 +1,6 @@
 /** Ouverture et enregistrement de fichiers locaux, sans aucune requête réseau. */
 import type { Octets } from '../crypto/encodage.ts';
+import { t } from '../i18n/index.ts';
 
 export interface FichierLu {
   nom: string;
@@ -44,7 +45,7 @@ export async function demanderEmplacement(nomSuggere: string): Promise<FileSyste
   try {
     return await (window as any).showSaveFilePicker({
       suggestedName: nomSuggere,
-      types: [{ description: 'Liste 2x2 chiffrée', accept: { 'application/json': ['.2x2'] } }],
+      types: [{ description: t('fichiers.type_liste'), accept: { 'application/json': ['.2x2'] } }],
     });
   } catch (e) {
     if ((e as DOMException)?.name === 'AbortError') return undefined;

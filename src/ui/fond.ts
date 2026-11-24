@@ -6,6 +6,7 @@
  */
 import { lireFondVectoriel, type FondVectoriel } from '../io/geojson.ts';
 import { indexerZip } from '../io/zip.ts';
+import { t } from '../i18n/index.ts';
 
 export interface FondCarte {
   nom: string;
@@ -59,7 +60,7 @@ export async function chargerFond(nom: string, octets: Uint8Array<ArrayBuffer>):
     tuiles.set(`${z}/${m[2]}/${m[3]}`, { lire, type: TYPES[m[4].toLowerCase()] });
     zooms.add(z);
   }
-  if (!tuiles.size) throw new Error('Aucune tuile trouvée : l’archive doit contenir des fichiers z/x/y.png (ou .jpg, .webp).');
+  if (!tuiles.size) throw new Error(t('fond.aucune_tuile'));
   const urls = new Map<string, Promise<string | undefined>>();
   // Tuiles au format XYZ (le plus courant) ; à défaut, schéma TMS (axe Y inversé).
   const cle = (z: number, x: number, y: number) => {

@@ -4,7 +4,7 @@
  * une exclusion directement depuis le tableau, et l'on décide de l'alerte d'origine.
  */
 import { cellule, corriger, deciderAlerte } from '../../model/journal.ts';
-import { CHAMP_STATUT, DECISIONS_ALERTE, MOTIFS_EXCLUSION, MOTIFS_REINTEGRATION, type Motif } from '../../model/types.ts';
+import { CHAMP_STATUT, DECISIONS_ALERTE, MOTIFS_EXCLUSION, MOTIFS_REINTEGRATION, libelleMotif, type Motif } from '../../model/types.ts';
 import { badge, bouton, encadre } from '../composants.ts';
 import { h, remplacer } from '../dom.ts';
 import { alertesCourantes, aller, apresModification, nomAuteur, notifier, occupe, peut, session } from '../session.ts';
@@ -12,6 +12,7 @@ import { formatDistance } from '../../controles/geo.ts';
 import { COULEURS, distancesDeuxADeux, plan } from '../plan.ts';
 import { peutDecider, pointMenage } from './alertes.ts';
 import { formulaireCorrection } from './correction.ts';
+import { t } from '../../i18n/index.ts';
 
 let seulementDifferences = false;
 
@@ -60,7 +61,7 @@ export function ecranComparaison() {
           h(
             'tr',
             null,
-            h('th', null, 'Champ'),
+            h('th', null, t('comparaison.champ')),
             menages.map((m) =>
               h(
                 'th',
@@ -70,7 +71,7 @@ export function ecranComparaison() {
                   {
                     type: 'button',
                     class: 'lien',
-                    title: 'Ouvrir la fiche de ce ménage',
+                    title: t('comparaison.ouvrir_fiche'),
                     onclick: () => {
                       session.comparaison = undefined;
                       session.menageSelectionne = m;
@@ -90,14 +91,14 @@ export function ecranComparaison() {
           h(
             'tr',
             { class: 'ligne-statut' },
-            h('th', { scope: 'row' }, 'Statut'),
+            h('th', { scope: 'row' }, t('validation.col_statut')),
             menages.map((m) => {
               const exclu = etat!.estExclu(m);
               const attente = etat!.enAttenteParCellule.has(cellule(m, CHAMP_STATUT));
               const td: HTMLElement = h(
                 'td',
                 null,
-                h('div', { class: 'cellule' }, exclu ? badge('exclu', 'refus') : badge('inclus', 'ok'), attente && badge('changement en attente', 'attente')),
+                h('div', { class: 'cellule' }, exclu ? badge(t('statut.exclu'), 'refus') : badge(t('statut.inclus'), 'ok'), attente && badge(t('correction.changement_attente'), 'attente')),
               );
               if (!attente) td.appendChild(selecteurMenage(m, exclu));
               return td;
@@ -115,11 +116,11 @@ export function ecranComparaison() {
                 const ancre = h(
                   'div',
                   { class: 'cellule' },
-                  h('span', { class: 'valeur' }, valeurs[k] || h('span', { class: 'discret' }, '(vide)')),
-                  attente && badge('en attente', 'attente'),
+                  h('span', { class: 'valeur' }, valeurs[k] || h('span', { class: 'discret' }, t('commun.vide'))),
+                  attente && badge(t('correction.en_attente'), 'attente'),
                 );
                 if (peutCorriger && c !== o.colonneId && !attente) {
-                  ancre.appendChild(bouton('Corriger', () => formulaireCorrection(m, c, ancre, dessiner)));
+                  ancre.appendChild(bouton(t('commun.corriger'), () => formulaireCorrection(m, c, ancre, dessiner)));
                 }
                 return h('td', null, ancre);
               }),
@@ -136,13 +137,13 @@ export function ecranComparaison() {
   const resume = h('div', { class: 'resume-groupe' });
   const choixAlerte = h(
     'select',
-    { 'aria-label': 'Décision sur l’alerte', onchange: () => (alerteForcee = true) },
-    h('option', { value: '' }, '— pas de décision d’alerte —'),
+    { 'aria-label': t('comparaison.decision_alerte'), onchange: () => (alerteForcee = true) },
+    h('option', { value: '' }, t('comparaison.pas_decision')),
     Object.entries(DECISIONS_ALERTE.integrite).map(([v, l]) => h('option', { value: v }, l)),
   );
   let alerteForcee = false;
-  const commentaire = h('input', { type: 'text', placeholder: 'Commentaire (obligatoire) : sur quoi reposent ces décisions ?', 'aria-label': 'Commentaire de la décision du groupe' });
-  const boutonSigner = bouton('Signer', () => signerGroupe(), 'principal');
+  const commentaire = h('input', { type: 'text', placeholder: t('comparaison.commentaire'), 'aria-label': t('comparaison.commentaire_label') });
+  const boutonSigner = bouton(t('commun.signer'), () => signerGroupe(), 'principal');
 
   function majGroupe() {
     const p = choix.parMenage;
@@ -152,16 +153,16 @@ export function ecranComparaison() {
     const parts: string[] = [];
     for (const m of changements) {
       const [quoi, motif] = p.get(m)!.split(':');
-      parts.push(`${quoi === 'exclure' ? 'exclure' : 'réintégrer'} ${m} (${motif})`);
+      parts.push(t(quoi === 'exclure' ? 'comparaison.part_exclure' : 'comparaison.part_reintegrer', { menage: m, motif: libelleMotif(motif) }));
     }
     const conserves = menages.filter((m) => p.get(m) === 'conserver');
-    if (conserves.length) parts.push(`conserver ${conserves.join(', ')}`);
+    if (conserves.length) parts.push(t('comparaison.part_conserver', { menages: conserves.join(', ') }));
     const verifies = menages.filter((m) => p.get(m) === 'verifier');
-    if (verifies.length) parts.push(`faire vérifier ${verifies.join(', ')} sur le terrain`);
-    remplacer(resume, parts.length ? `À signer : ${parts.join(' · ')}.` : 'Choisissez une décision pour chaque ménage dans la ligne « Statut » du tableau.');
+    if (verifies.length) parts.push(t('comparaison.part_verifier', { menages: verifies.join(', ') }));
+    remplacer(resume, parts.length ? t('comparaison.a_signer', { parts: parts.join(' · ') }) : t('comparaison.choisissez'));
     const rien = !changements.length && !choixAlerte.value;
     boutonSigner.toggleAttribute('disabled', rien);
-    boutonSigner.textContent = changements.length ? `Signer (${changements.length} changement(s) de statut${choixAlerte.value ? ' + décision d’alerte' : ''})` : 'Signer la décision';
+    boutonSigner.textContent = changements.length ? t(choixAlerte.value ? 'comparaison.signer_changements_alerte' : 'comparaison.signer_changements', { n: changements.length }) : t('alertes.signer_decision');
   }
   choixAlerte.addEventListener('change', majGroupe);
 
@@ -171,18 +172,18 @@ export function ecranComparaison() {
       'select',
       {
         class: 'decision-menage',
-        'aria-label': `Décision pour le ménage ${m}`,
+        'aria-label': t('comparaison.decision_menage', { menage: m }),
         onchange: () => {
           sel.value ? choix.parMenage.set(m, sel.value) : choix.parMenage.delete(m);
           majGroupe();
         },
       },
-      h('option', { value: '' }, '— Décision —'),
-      h('option', { value: 'conserver', selected: valeur === 'conserver' }, exclu ? 'Laisser exclu' : 'Conserver : ménage valide'),
-      h('option', { value: 'verifier', selected: valeur === 'verifier' }, 'À vérifier sur le terrain'),
+      h('option', { value: '' }, t('commun.choix_decision')),
+      h('option', { value: 'conserver', selected: valeur === 'conserver' }, exclu ? t('comparaison.laisser_exclu') : t('comparaison.conserver')),
+      h('option', { value: 'verifier', selected: valeur === 'verifier' }, t('decision.verification_terrain')),
       exclu
-        ? h('optgroup', { label: 'Réintégrer' }, MOTIFS_REINTEGRATION.map((mo) => h('option', { value: `reintegrer:${mo}`, selected: valeur === `reintegrer:${mo}`, disabled: !peutCorriger }, mo)))
-        : h('optgroup', { label: 'Exclure' }, MOTIFS_EXCLUSION.map((mo) => h('option', { value: `exclure:${mo}`, selected: valeur === `exclure:${mo}`, disabled: !peutCorriger }, mo))),
+        ? h('optgroup', { label: t('comparaison.reintegrer') }, MOTIFS_REINTEGRATION.map((mo) => h('option', { value: `reintegrer:${mo}`, selected: valeur === `reintegrer:${mo}`, disabled: !peutCorriger }, libelleMotif(mo))))
+        : h('optgroup', { label: t('comparaison.exclure') }, MOTIFS_EXCLUSION.map((mo) => h('option', { value: `exclure:${mo}`, selected: valeur === `exclure:${mo}`, disabled: !peutCorriger }, libelleMotif(mo)))),
     );
     return sel;
   }
@@ -191,15 +192,15 @@ export function ecranComparaison() {
     const p = choix.parMenage;
     const changements = menages.filter((m) => /^(exclure|reintegrer):/.test(p.get(m) ?? ''));
     const decisionAlerte = alerte ? choixAlerte.value : '';
-    if (!changements.length && !decisionAlerte) return notifier('Rien à signer.', 'erreur');
+    if (!changements.length && !decisionAlerte) return notifier(t('comparaison.rien'), 'erreur');
     if (!commentaire.value.trim()) {
       commentaire.focus();
-      return notifier('Expliquez ces décisions en commentaire.', 'erreur');
+      return notifier(t('comparaison.expliquer'), 'erreur');
     }
-    if (changements.length && !peutCorriger) return notifier('Exclure ou réintégrer demande le rôle « Correction ».', 'erreur');
-    if (decisionAlerte && !peutDecider()) return notifier('Décider de l’alerte demande le rôle « Validation » ou « Responsable ».', 'erreur');
+    if (changements.length && !peutCorriger) return notifier(t('comparaison.role_correction'), 'erreur');
+    if (decisionAlerte && !peutDecider()) return notifier(t('comparaison.role_decider'), 'erreur');
     const texte = commentaire.value.trim();
-    occupe('Signature…', async () => {
+    occupe(t('commun.signature'), async () => {
       for (const m of changements) {
         const [quoi, motif] = p.get(m)!.split(/:(.*)/s);
         await corriger(liste!, etat!, session.identite!, {
@@ -217,7 +218,11 @@ export function ecranComparaison() {
       }
       choix = { cle: '', parMenage: new Map() };
       notifier(
-        `${changements.length ? `${changements.length} changement(s) de statut proposé(s) (à valider par une autre personne)` : ''}${changements.length && decisionAlerte ? ' et ' : ''}${decisionAlerte ? 'décision d’alerte signée' : ''}.`,
+        changements.length && decisionAlerte
+          ? t('comparaison.signe_tout', { n: changements.length })
+          : changements.length
+            ? t('comparaison.signe_changements', { n: changements.length })
+            : t('comparaison.signe_alerte'),
         'succes',
       );
       await apresModification();
@@ -227,10 +232,10 @@ export function ecranComparaison() {
   const barreGroupe = h(
     'div',
     { class: 'barre-groupe statique decision-groupe' },
-    h('strong', null, 'Décision sur ce groupe'),
+    h('strong', null, t('comparaison.decision_groupe')),
     resume,
-    h('div', { class: 'actions' }, alerte && peutDecider() && h('label', { class: 'discret' }, 'Alerte : ', choixAlerte), commentaire, boutonSigner),
-    alerte && !peutDecider() && h('p', { class: 'aide' }, 'La décision sur l’alerte revient à une personne en validation ou responsable : vos changements de statut lui seront soumis.'),
+    h('div', { class: 'actions' }, alerte && peutDecider() && h('label', { class: 'discret' }, t('comparaison.alerte'), choixAlerte), commentaire, boutonSigner),
+    alerte && !peutDecider() && h('p', { class: 'aide' }, t('comparaison.decision_revient')),
   );
 
   dessiner();
@@ -246,7 +251,7 @@ export function ecranComparaison() {
     h(
       'details',
       { class: 'carte carte-gps', open: true },
-      h('summary', null, h('strong', null, 'Position GPS'), ` · ${avecPoint.length} ménage(s) sur ${menages.length} avec des coordonnées`),
+      h('summary', null, h('strong', null, t('comparaison.position')), t('comparaison.avec_coordonnees', { n: avecPoint.length, total: menages.length })),
       h(
         'div',
         { class: 'gps-comparaison' },
@@ -254,14 +259,14 @@ export function ecranComparaison() {
           avecPoint.map((x) => ({
             ...x,
             etiquette: x.id,
-            infobulle: `${x.id}${x.point.precision ? ` (précision ±${Math.round(x.point.precision)} m)` : ''}`,
+            infobulle: `${x.id}${x.point.precision ? t('comparaison.precision', { m: Math.round(x.point.precision) }) : ''}`,
           })),
           { hauteur: 300, etiquettes: true },
         ),
         h(
           'table',
           { class: 'tableau distances' },
-          h('thead', null, h('tr', null, h('th', null, 'Entre'), h('th', null, 'Distance'), h('th', null, 'Précision GPS'))),
+          h('thead', null, h('tr', null, h('th', null, t('comparaison.entre')), h('th', null, t('comparaison.distance')), h('th', null, t('comparaison.precision_gps')))),
           h(
             'tbody',
             null,
@@ -277,18 +282,18 @@ export function ecranComparaison() {
                   { class: marge && d <= marge ? 'confondus' : '' },
                   h('td', null, `${a} ↔ ${b}`),
                   h('td', null, formatDistance(d)),
-                  h('td', null, pa || pb ? `±${Math.round(pa ?? 0)} m / ±${Math.round(pb ?? 0)} m` : '—', marge && d <= marge ? h('div', { class: 'discret' }, 'même endroit, aux erreurs de mesure près') : ''),
+                  h('td', null, pa || pb ? `±${Math.round(pa ?? 0)} m / ±${Math.round(pb ?? 0)} m` : '—', marge && d <= marge ? h('div', { class: 'discret' }, t('comparaison.meme_endroit')) : ''),
                 );
               }),
           ),
         ),
       ),
-      avecPoint.length < menages.length && h('p', { class: 'aide' }, `Sans coordonnées : ${menages.filter((m) => !avecPoint.some((x) => x.id === m)).join(', ')}.`),
+      avecPoint.length < menages.length && h('p', { class: 'aide' }, t('comparaison.sans_coordonnees', { menages: menages.filter((m) => !avecPoint.some((x) => x.id === m)).join(', ') })),
     );
 
   return [
-    h('div', { class: 'barre-retour' }, bouton('← Retour à la liste', retour)),
-    h('h1', null, `Comparaison de ${menages.length} ménages`),
+    h('div', { class: 'barre-retour' }, bouton(t('comparaison.retour'), retour)),
+    h('h1', null, t('comparaison.titre', { n: menages.length })),
     alerte &&
       encadre(
         'alerte',
@@ -296,16 +301,14 @@ export function ecranComparaison() {
         ' — ',
         alerte.message,
         ' ',
-        decision ? badge(DECISIONS_ALERTE[decision.contenu.categorie][decision.contenu.decision], 'ok') : badge('sans décision', 'attente'),
+        decision ? badge(DECISIONS_ALERTE[decision.contenu.categorie][decision.contenu.decision], 'ok') : badge(t('commun.sans_decision'), 'attente'),
         decision && h('span', { class: 'discret' }, ` ${nomAuteur(decision.auteur)}`),
       ),
     carteGps,
     h(
       'p',
       { class: 'aide' },
-      'Les lignes surlignées sont celles où les ménages diffèrent. « Corriger » propose une nouvelle valeur. ',
-      'Dans la ligne « Statut », choisissez une décision pour chaque ménage (conserver, faire vérifier, exclure avec son motif), puis signez le tout en une fois : ',
-      'la décision sur l’alerte est proposée d’après vos choix. Les exclusions attendent la validation d’une autre personne.',
+      t('comparaison.aide'),
     ),
     h(
       'label',
@@ -318,7 +321,7 @@ export function ecranComparaison() {
           dessiner();
         },
       }),
-      ' Afficher seulement les champs qui diffèrent',
+      t('comparaison.differences'),
     ),
     barreGroupe,
     zone,

@@ -6,6 +6,7 @@ import { lireExport } from '../io/import.ts';
 import { ecrireOds } from '../io/ods.ts';
 import { ecrireXlsx, type FeuilleXlsx } from '../io/xlsx.ts';
 import { reglesDepuisTableau, tableauAide, tableauDepuisRegles, validerRegles, type Regle } from './regles.ts';
+import { t } from '../i18n/index.ts';
 
 export type FormatRegles = 'xlsx' | 'ods' | 'csv';
 
@@ -36,6 +37,6 @@ export async function importerRegles(octets: Octets, nomFichier: string, colonne
     return { regles: [], erreurs: [(e as Error).message], nomFichier, empreinteFichier };
   }
   const erreurs = [...lu.erreurs, ...validerRegles(lu.regles, colonnesListe)];
-  if (!lu.regles.length) erreurs.push('Le fichier ne contient aucune règle.');
+  if (!lu.regles.length) erreurs.push(t('regles.err_vide'));
   return { regles: lu.regles, erreurs, nomFichier, empreinteFichier };
 }

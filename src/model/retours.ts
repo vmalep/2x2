@@ -12,8 +12,9 @@ import { distance, formatDistance, lirePoint, pointDepuis } from '../controles/g
 import type { Tableau } from '../io/tableau.ts';
 import type { FeuilleXlsx } from '../io/xlsx.ts';
 import { cellule, type Etat } from './journal.ts';
-import { CHAMP_STATUT, MOTIFS_EXCLUSION, type Motif } from './types.ts';
+import { CHAMP_STATUT, MOTIFS_EXCLUSION, libelleMotif, type Motif } from './types.ts';
 import { NOM_PRECHARGEMENT, nomKobo } from './visite.ts';
+import { t } from '../i18n/index.ts';
 
 const FICHIER = NOM_PRECHARGEMENT.replace(/\.csv$/, '');
 
@@ -148,18 +149,18 @@ function depuisLibelles(t: Tableau, etat: Etat): Tableau {
 
 export function lireRetours(source: Tableau, etat: Etat, alertes: Alerte[], colonneGps: string): Retours {
   const erreurs: string[] = [];
-  const t = depuisLibelles(source, etat);
+  const tab = depuisLibelles(source, etat);
   const nom = (c: string) => c.replace(/^.*\//, '');
-  const indice = (n: string) => t.colonnes.findIndex((c) => nom(c) === n);
+  const indice = (n: string) => tab.colonnes.findIndex((c) => nom(c) === n);
   const iMenage = indice('menage');
   if (iMenage < 0) {
-    const listeDeVisite = t.colonnes.includes('À vérifier') && t.colonnes.some((c) => c.startsWith('Ménage trouvé'));
+    const listeDeVisite = tab.colonnes.includes('À vérifier') && tab.colonnes.some((c) => c.startsWith('Ménage trouvé'));
     return {
       actions: [],
       erreurs: [
         listeDeVisite
-          ? 'Ce fichier est une liste de visite : elle sert sur le terrain mais ne se réimporte pas (texte libre, sans preuve de visite). Saisissez les résultats dans 2x2 (décisions d’alerte, corrections, exclusions), ou utilisez le formulaire Kobo de revisite et importez ici l’export de ses réponses.'
-          : 'Fichier non reconnu : importez l’export des réponses du formulaire Kobo de revisite (il contient une colonne « menage »).',
+          ? t('retours.err_liste_visite')
+          : t('retours.err_non_reconnu'),
       ],
       reponses: 0,
     };
@@ -175,25 +176,25 @@ export function lireRetours(source: Tableau, etat: Etat, alertes: Alerte[], colo
 
   const actions: ActionRetour[] = [];
   let n = 0;
-  t.lignes.forEach((l, i) => {
+  tab.lignes.forEach((l, i) => {
     const menage = val(l, 'menage');
     if (!menage) return;
     n++;
-    const ou = `Réponse ${i + 1} (${menage})`;
-    if (!etat.indexMenages.has(menage)) return erreurs.push(`${ou} : ménage inconnu dans cette liste.`);
+    const ou = t('retours.ou', { n: i + 1, menage });
+    if (!etat.indexMenages.has(menage)) return erreurs.push(t('retours.err_menage', { ou }));
     const jour = (val(l, 'today') || val(l, 'start')).slice(0, 10);
     const visiteur = val(l, 'visiteur');
     const constat = val(l, 'constat');
-    const source = `Visite terrain${jour ? ` du ${jour}` : ''}${visiteur ? ` (${visiteur})` : ''}${constat ? ` : ${constat}` : ''}`;
+    const source = t('retours.source') + (jour ? t('retours.source_jour', { jour }) : '') + (visiteur ? ` (${visiteur})` : '') + (constat ? t('retours.source_constat', { constat }) : '');
 
     // Preuve de visite : la position de la visite doit être proche de celle du ménage.
     let avertissement: string | undefined;
     const pVisite = lirePoint(val(l, 'gps_visite')) ?? pointDepuis((c) => { const k = indice(nom(c)); return k < 0 ? undefined : l[k]; }, 'gps_visite');
     const pMenage = colonneGps ? pointDepuis((c) => etat.valeur(menage, c), colonneGps) : undefined;
-    if (!pVisite) avertissement = 'Visite sans position GPS.';
+    if (!pVisite) avertissement = t('retours.sans_gps');
     else if (pMenage) {
       const d = distance(pVisite, pMenage);
-      if (d > DISTANCE_VISITE_MAX) avertissement = `Visite enregistrée à ${formatDistance(d)} du ménage.`;
+      if (d > DISTANCE_VISITE_MAX) avertissement = t('retours.loin', { distance: formatDistance(d) });
     }
 
     const aDecider = (alertesParMenage.get(menage) ?? []).filter((a) => {
@@ -215,7 +216,7 @@ export function lireRetours(source: Tableau, etat: Etat, alertes: Alerte[], colo
       cle: `${i}:x`,
       menage,
       nature: 'exclusion',
-      resume: `Exclure (${pourquoi})`,
+      resume: t('retours.exclure', { pourquoi }),
       commentaire: source,
       champ: CHAMP_STATUT,
       ancienne: etat.valeur(menage, CHAMP_STATUT) ?? 'inclus',
@@ -223,32 +224,32 @@ export function lireRetours(source: Tableau, etat: Etat, alertes: Alerte[], colo
       motif,
       avertissement,
       impossible: etat.estExclu(menage)
-        ? 'Ménage déjà exclu.'
+        ? t('retours.deja_exclu')
         : etat.enAttenteParCellule.has(cellule(menage, CHAMP_STATUT))
-          ? 'Un changement de statut est déjà en attente.'
+          ? t('retours.statut_attente')
           : undefined,
     });
 
     const trouve = val(l, 'trouve');
     const resultat = val(l, 'resultat');
     if (trouve === 'non') {
-      actions.push(exclusion('Ménage introuvable ou inexistant', 'introuvable ou inexistant'));
-      actions.push(...decisions('confirmee', 'Problème confirmé (ménage introuvable)'));
+      actions.push(exclusion('Ménage introuvable ou inexistant', libelleMotif('Ménage introuvable ou inexistant').toLowerCase()));
+      actions.push(...decisions('confirmee', t('retours.confirme_introuvable')));
     } else if (resultat === 'conforme') {
-      actions.push(...decisions('faux_positif', 'Vérifiée : pas de problème'));
-      if (!aDecider.length) erreurs.push(`${ou} : données conformes, aucune alerte à clore.`);
+      actions.push(...decisions('faux_positif', t('decision.faux_positif')));
+      if (!aDecider.length) erreurs.push(t('retours.err_conforme', { ou }));
     } else if (resultat === 'donnee_fausse') {
       const code = val(l, 'champ');
       const champ = colonnesParCode.get(code);
       const nouvelle = val(l, 'valeur');
-      if (!champ || champ === etat.original.colonneId) erreurs.push(`${ou} : champ « ${code} » inconnu.`);
+      if (!champ || champ === etat.original.colonneId) erreurs.push(t('retours.err_champ', { ou, code }));
       else {
         const ancienne = etat.valeur(menage, champ) ?? '';
         actions.push({
           cle: `${i}:c`,
           menage,
           nature: 'correction',
-          resume: `${champ} : « ${ancienne || '(vide)'} » → « ${nouvelle || '(vide)'} »`,
+          resume: t('retours.resume_correction', { champ, ancienne: ancienne || t('commun.vide'), nouvelle: nouvelle || t('commun.vide') }),
           commentaire: source,
           champ,
           ancienne,
@@ -257,19 +258,19 @@ export function lireRetours(source: Tableau, etat: Etat, alertes: Alerte[], colo
           avertissement,
           impossible:
             nouvelle === ancienne
-              ? 'Valeur identique à la valeur actuelle.'
+              ? t('retours.identique')
               : etat.enAttenteParCellule.has(cellule(menage, champ))
-                ? 'Une correction est déjà en attente pour ce champ.'
+                ? t('retours.correction_attente')
                 : undefined,
         });
-        actions.push(...decisions('confirmee', 'Problème confirmé (donnée corrigée)'));
+        actions.push(...decisions('confirmee', t('retours.confirme_corrigee')));
       }
     } else if (resultat === 'a_exclure') {
       const motif = motifParCode.get(val(l, 'motif_exclusion')) ?? 'Autre (préciser en commentaire)';
-      actions.push(exclusion(motif, motif.toLowerCase()));
-      actions.push(...decisions('confirmee', 'Problème confirmé (ménage exclu)'));
+      actions.push(exclusion(motif, libelleMotif(motif).toLowerCase()));
+      actions.push(...decisions('confirmee', t('retours.confirme_exclu')));
     } else {
-      erreurs.push(`${ou} : résultat non renseigné.`);
+      erreurs.push(t('retours.err_resultat', { ou }));
     }
   });
   return { actions, erreurs, reponses: n };

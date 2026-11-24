@@ -1,6 +1,7 @@
 import { grouper } from '../crypto/empreinte.ts';
 import { h, type Enfant } from './dom.ts';
 import { notifier } from './session.ts';
+import { t } from '../i18n/index.ts';
 
 export function carte(titre: string, ...contenu: Enfant[]) {
   return h('section', { class: 'carte' }, h('h2', null, titre), ...contenu);
@@ -30,13 +31,13 @@ export function empreinte(hex: string, groupes = 8) {
         onclick: async () => {
           try {
             await navigator.clipboard.writeText(hex);
-            notifier('Empreinte copiée.', 'succes');
+            notifier(t('commun.empreinte_copiee'), 'succes');
           } catch {
-            notifier('Copie impossible : sélectionnez le texte manuellement.', 'erreur');
+            notifier(t('commun.copie_impossible'), 'erreur');
           }
         },
       },
-      'Copier',
+      t('commun.copier'),
     ),
   );
 }
