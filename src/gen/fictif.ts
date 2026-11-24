@@ -114,7 +114,7 @@ function variante(nom: string, alea: () => number): string {
   return mots.length > 1 ? `${mots[1]} ${mots[0]}` : nom + 'u';
 }
 
-function isoKinshasa(ms: number): string {
+function isoHeureLocale(ms: number): string {
   // Heure locale fictive UTC+1, au format des exports Kobo.
   const d = new Date(ms + 3600_000);
   return d.toISOString().replace('Z', '+01:00');
@@ -197,9 +197,9 @@ export function genererDonneesFictives(options: OptionsFictif = {}): DonneesFict
     const taille = entier(1, 11);
     const moins5 = Math.min(taille - 1, entier(0, 3));
     lignes.push([
-      isoKinshasa(debut),
-      isoKinshasa(fin),
-      isoKinshasa(debut).slice(0, 10),
+      isoHeureLocale(debut),
+      isoHeureLocale(fin),
+      isoHeureLocale(debut).slice(0, 10),
       enqueteur,
       territoire,
       village,
